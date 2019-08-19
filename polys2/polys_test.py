@@ -1,3 +1,0 @@
-import polys
-
-print("uuu")

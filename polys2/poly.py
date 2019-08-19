@@ -3,15 +3,17 @@ import tensorflow as tf
 import numbers
 import itertools as itt
 from scipy.special import factorial, binom
+from typing import Union, Tuple, List
 
 from pitf import ptf, nptf
 from pitf.ptf import is_tf_object
-import tensor_utils as pit
+from . import tensor_utils as pit
 
-from batch_utils import Batched_Object
-from engine import (array_poly_prod, eval_poly, get_1D_Taylor_matrix,
+from .batch_utils import Batched_Object
+from .engine import (array_poly_prod, eval_poly, get_1D_Taylor_matrix,
         get_1d_Taylor_coef_grid)
-from plot_utils import plot_fun
+from .plot_utils import plot_fun
+
 
 #####################################
 ## Some other auxilliary funs
@@ -83,7 +85,7 @@ class Poly(Batched_Object, Val_Indexed_Object):
             )
             
                      
-        assert coef.ndim == self.batch_ndim + self.var_ndim + self.val_ndim,(
+        assert len(coef.shape) == self.batch_ndim + self.var_ndim + self.val_ndim,(
             "The sum of batch_ndim = {}, var_ndim = {}, val_ndim = {} "
             "should be equal to coef_ndim = {}.".format(
                 self.batch_ndim, self.var_ndim, self.val_ndim, coef.ndim
@@ -98,7 +100,7 @@ class Poly(Batched_Object, Val_Indexed_Object):
         a polynomial of degree `deg` (wrt. each variable) in n-dimensional space.
         The array of coefficients of the result has shape [deg]*n.
         """
-        deg = a.ndim - batch_ndim
+        deg = len(a.shape) - batch_ndim
         if deg == 0:
             assert var_ndim is not None, "For a constant polynomial you must specify the number of variables."
             return Poly(
@@ -137,7 +139,7 @@ class Poly(Batched_Object, Val_Indexed_Object):
 
         return Poly(coef, var_ndim = n, batch_ndim=batch_ndim)
     
-    def unit_like(p):
+    def unit_like(p) -> "Poly":
         """Return a polynomial representing 1 with the same batch_ndim and degrees as `p`.
         """
         shape = nptf.shape(p.coef)
@@ -156,64 +158,7 @@ class Poly(Batched_Object, Val_Indexed_Object):
         one = nptf.ones(batch_shape, dtype)[(Ellipsis,) + (None,) * p.var_ndim] * one
     
         return Poly(coef = one, batch_ndim= batch_ndim, var_ndim=p.var_ndim)
-    
-    def _get_data_to_execute(self):
-        if ptf.is_tf_object(self.coef):
-            return self.coef
-        else:
-            return []
-
         
-    def _make_copy_from_executed_data(self, data):
-        if ptf.is_tf_object(self.coef):
-            return Poly(
-                coef = data,
-                batch_ndim = self.batch_ndim,
-                var_ndim = self.var_ndim,
-                val_ndim = self.val_ndim,
-            )
-        else:
-            return self
-        
-        
-    def _unstack_coef_to_array(self):
-        assert ptf.is_tf_object(self.coef)
-        return Poly(
-            coef = ptf.unstack_to_array(
-                x = self.coef,
-                ndim = self.var_ndim,
-                start_index = self.batch_ndim
-            ),
-            batch_ndim = 0,
-            var_ndim = self.var_ndim,
-            val_ndim = 0
-        )
-    
-    def _stack_coef_to_tf(self, batch_ndim):
-        coef = ptf.stack_from_array(
-                a = self.coef,
-                start_index = batch_ndim            
-            )
-        
-        return Poly(
-            coef = coef,
-            batch_ndim = batch_ndim,
-            var_ndim = self.var_ndim,
-            val_ndim = len(coef.shape) - batch_ndim - self.var_ndim
-        )
-    
-    def _put_coefs_to_tf_constant_if_np(self):
-        if ptf.is_tf_object(self.coef):
-            return self
-        else:
-            return Poly(
-                coef = tf.constant(self.coef),
-                batch_ndim = self.batch_ndim,
-                var_ndim = self.var_ndim,
-                val_ndim = self.val_ndim
-            )
-        
-    
             
     def __repr__(self):
         s = "Poly( " + str(self.coef) 
@@ -245,49 +190,17 @@ class Poly(Batched_Object, Val_Indexed_Object):
                 "This can be generalised but is not implemented. "
             )
 
-            if any([ptf.is_tf_object(f.coef) for f in {self, other}]):
-                f, g = [x._put_coefs_to_tf_constant_if_np() for x in [self, other]]
-                
-                ## It can happen that one of the polynomials 
-                ## is not scalar-valued i.e. val_ndim > 0.
-                ## In that case, we must add the corresponding number
-                ## of dimesions to the values of the other one.
-#                print(
-#                        "f.val_ndim = " + str(f.val_ndim) + "; " +
-#                        "g.val_ndim = " + str(g.val_ndim) + ". " 
-#                    )
-
-
-                if f.val_ndim == 0 or g.val_ndim == 0:
-                    if f.val_ndim > g.val_ndim:
-                        f, g = g, f
-                    f = f.val[(None, ) * (g.val_ndim - f.val_ndim)]
-                
-                assert f.val_ndim == g.val_ndim, (
-                    "f.val_ndim = " + str(f.val_ndim) + "; " +
-                    "g.val_ndim = " + str(g.val_ndim) + ". " 
-                )
-                
-                ## make f, g into polys with np.array coef
-                f_np, g_np = [x._unstack_coef_to_array() for x in[f, g]]
-#                print("shape of elements in coefficient fields of f_np, g_np is " +
-#                      str(f_np.coef.flat[0].shape), str(g_np.coef.flat[0].shape)
-#                )
-                
-                prod_np = f_np.__mul__(g_np, truncation = truncation)
-                return prod_np._stack_coef_to_tf(self.batch_ndim)
-            else:
-                return Poly(
-                    coef = array_poly_prod(
-                        self.coef, other.coef, 
-                        batch_ndim = self.batch_ndim, 
-                        var_ndim = self.var_ndim,
-                        truncation=truncation
-                    ),
-                    batch_ndim = self.batch_ndim,
+            return Poly(
+                coef = array_poly_prod(
+                    self.coef, other.coef, 
+                    batch_ndim = self.batch_ndim, 
                     var_ndim = self.var_ndim,
-                    val_ndim = max(self.val_ndim, other.val_ndim)
-                )
+                    truncation=truncation
+                ),
+                batch_ndim = self.batch_ndim,
+                var_ndim = self.var_ndim,
+                val_ndim = max(self.val_ndim, other.val_ndim)
+            )
         else:
             if isinstance(other, (np.ndarray, tf.Tensor, tf.Variable)):
                 other_ndim = nptf.ndim(other)
@@ -406,7 +319,8 @@ class Poly(Batched_Object, Val_Indexed_Object):
             var_ndim = f.var_ndim
         )
     
-    def truncate_degs(self, limit_degs):
+    def truncate_degs(self, limit_degs: Union[int, List[int]]) -> "Poly":
+        """Return Poly whose degrees are at most `limit_degs`."""
         degs = np.minimum(limit_degs, self.degs)
         selector = [slice(None)]* self.batch_ndim +  [slice(None, int(deg)) for deg in degs]
         selector = tuple(selector)
@@ -609,6 +523,8 @@ class Poly(Batched_Object, Val_Indexed_Object):
     
       
     def get_Taylor_grid(self, params, truncs = None):
+        from .taylor_grid import TaylorGrid
+
         assert len(params) == self.var_ndim
         assert issubclass( nptf.np_dtype(self.coef).type, np.floating), (
             "Polynomial should have coef of floating dtype. "
@@ -638,6 +554,8 @@ class Poly(Batched_Object, Val_Indexed_Object):
         )
     
     def to_PolyMesh(self, params):
+        from .poly_mesh import PolyMesh
+
         assert len(params) <= self.batch_ndim
         return PolyMesh(
             coef = self.coef, 
@@ -647,6 +565,8 @@ class Poly(Batched_Object, Val_Indexed_Object):
         )
 
     def to_TaylorGrid(self, params):
+        from .taylor_grid import TaylorGrid
+
         assert len(params) <= self.batch_ndim
         return TaylorGrid(
             coef = self.coef, 

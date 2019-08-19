@@ -7,10 +7,11 @@ import tensorflow as tf
 
 from scipy.special import binom
 import numpy.linalg as la
+from pitf import nptf
 
 
-import tensor_utils as pit
-import batch_utils as pib
+from . import tensor_utils as pit
+from . import batch_utils as pib
 
 #%%
         
@@ -31,7 +32,7 @@ def get_monomials(x, degs):
         `mon[a1, ...an] = x1**a1 * ... xn**an`.
     """
     def monomials_1var(x, deg):
-        return x[..., None] ** np.arange(deg)
+        return x[..., None] ** tf.range(deg, dtype=x.dtype)
     
     assert x.shape[-1] == len(degs)
     
@@ -87,7 +88,7 @@ def eval_poly(coef, x, batch_ndim = None, var_ndim = None, val_ndim = None, ):
     monoms = monoms[(Ellipsis, ) + (None, )*val_ndim]
     return tf.reduce_sum(
         coef * monoms, 
-        axis = tuple(np.arange(batch_ndim, batch_ndim + var_ndim))
+        axis = tf.range(batch_ndim, batch_ndim + var_ndim)
     )
 
 
@@ -122,30 +123,14 @@ def get_1d_Taylor_coef_grid(coef, poly_index, new_index, control_times, trunc = 
     A = np.array([
         get_1D_Taylor_matrix(a, deg = coef.shape[poly_index], trunc = trunc).T
         for a in control_times        
-    ], dtype = coef.dtype.as_numpy_dtype)
+    ], dtype = nptf.np_dtype(coef))
     
     if poly_index >= new_index:
         poly_index += 1
         
 
-    ##It should work like this the following commented code and it does in numpy. 
-    ##However tensorflow can't broadcast matmul yet, so it fails in tensorflow.
-    #taylors = right_apply_map_along_batch(
-    #    X = nptf.expand_dims(coef, new_index),
-    #    A = A,
-    #    batch_inds = [new_index],
-    #    contract_inds = [poly_index],
-    #    added_inds = [poly_index]
-    #)
-
-    ## Also this way could be written more concisely if tensorflow had equivalent of np.repeat:
-    coef_repeated = tf.tile(
-            tf.expand_dims(coef, new_index),
-            reps = [len(control_times) if i == new_index else 1 for i in range(tf.ndim(coef) + 1)]
-        )
-    
     taylors = pit.right_apply_map_along_batch(
-        X = coef_repeated,
+        X = tf.expand_dims(coef, new_index),
         A = A,
         batch_inds = [new_index],
         contract_inds = [poly_index],
@@ -170,8 +155,7 @@ def get_1D_Taylors_to_spline_patch_matrix(a, b, deg):
     return la.inv(Taylors_matrix)
                         
         
-#get_1D_Taylors_to_spline_patch_matrix(0, 1, 2)
-    
+#%%    
 
 def get_Catmul_Rom_Taylors_1D(coef, control_index, control_times, added_index):
     assert len(control_times) == coef.shape[control_index]
@@ -242,7 +226,8 @@ def array_poly_prod(a, b, batch_ndim = 0, var_ndim = None, truncation = None):
             a.shape[:batch_ndim], b.shape[:batch_ndim]
     ])
     
-    c = np.zeros( c_batch_shape + list(deg_c) + list(val_shape) , dtype = np.promote_types(a.dtype, b.dtype))
+    dtype = np.promote_types(nptf.np_dtype(a), nptf.np_dtype(b))
+    c = np.zeros( c_batch_shape + list(deg_c) + list(val_shape), dtype=dtype)
     
     
     for i in range(np.prod(degs_a)):
@@ -326,7 +311,7 @@ def get_spline_from_taylors_1D(taylor_grid_coeffs, bin_axis, polynom_axis, contr
         axis = polynom_axis
     )
     
-    dtype = tf.np_dtype(taylor_grid_coeffs)
+    dtype = nptf.np_dtype(taylor_grid_coeffs)
     deg = int(taylor_grid.shape[polynom_axis])
     ## reparametrization matrices for expressing the taylors in bin-scaled 
     ## Note that we have already stuck the two taylors together along the polynom-axis
@@ -375,7 +360,7 @@ def get_1D_integral_of_piecewise_poly(
     IM = np.array([
             integration_functional(a, b, deg)
             for a, b in zip(control_times[:-1], control_times[1:])
-        ], dtype = tf.np_dtype(coef))
+        ], dtype = nptf.np_dtype(coef))
     
     # the following could be done with tensordot:
     return pit.right_apply_map_along_batch(
@@ -383,15 +368,6 @@ def get_1D_integral_of_piecewise_poly(
         batch_inds = [], contract_inds = [bin_axis, polynom_axis], added_inds = []
     ) 
     
-#get_1D_integral_of_piecewise_poly(
-#    coef = np.array([
-#        [0, 1, 0],
-#        [1, 0, 0],
-#    ]),
-#    bin_axis = 0,
-#    polynom_axis = 1,
-#    control_times = [-1, 0, 1]
-#)
     
 def get_integral_of_spline_from_taylors_1D(
         taylor_grid_coeffs, bin_axis, polynom_axis, control_times,
