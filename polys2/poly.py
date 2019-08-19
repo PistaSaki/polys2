@@ -37,11 +37,12 @@ def get_bin_indices(bins, tt):
     """
     batch_ndim = len(tt.shape)
 
-    tt_reshaped = tt[..., None] 
+    tt = tf.cast(tt, bins.dtype)
+    tt_reshaped = tt[..., None]
     bins_reshaped = bins[(None,) * batch_ndim + (slice(None),)]
                          
     return tf.reduce_sum(
-        tf.cast( tt_reshaped >= bins_reshaped , np.int64),
+        tf.cast( tt_reshaped >= bins_reshaped , np.int32),
         axis = -1
     ) - 1
             
