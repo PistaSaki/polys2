@@ -1,7 +1,7 @@
 import numpy as np
 import tensorflow as tf
 
-from polys2.tensor_utils import right_apply_map_along_batch
+from polys2.tensor_utils import right_apply_map_along_batch, flatten_left
 
 def test_right_apply_along_batch():
     floatx = np.float32
@@ -31,5 +31,11 @@ def test_right_apply_along_batch():
     )
     print(Y)
     
+#%%
+def test_flatten_left():
+    assert flatten_left(tf.ones([2, 3, 4, 5]), ndims=2).shape == [6, 4, 5]
+#%%
+    
 if __name__ == "__main__":
     test_right_apply_along_batch()
+    test_flatten_left()

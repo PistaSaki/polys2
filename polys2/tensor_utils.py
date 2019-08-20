@@ -111,3 +111,18 @@ def apply_tensor_product_of_maps(matrices, x, start_index = 0):
     for M in reversed(matrices):
         x = np.tensordot(M, x, axes = [[1], [start_index + n-1]])
     return x
+
+def flatten_left(values, ndims=None):
+    old_shape = tf.shape(values)
+    if ndims == None:
+        ndims = len(old_shape)
+    
+    new_shape = tf.concat(
+        values = [
+            tf.reduce_prod(old_shape[:ndims], keepdims=True),
+            old_shape[ndims:]
+        ], 
+        axis = 0
+    )
+    
+    return tf.reshape(values, new_shape)
