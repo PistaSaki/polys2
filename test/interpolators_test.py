@@ -1,5 +1,5 @@
 from polys2.interpolators import (CR_spline_coeffs, get_spline_coeffs_1d,
-    get_spline_coeffs, evaluate_interpolator)
+    get_spline_coeffs, evaluate_interpolator, Interpolator)
 from polys2.tensor_utils import flatten_left
 
 import numpy as np
@@ -30,17 +30,17 @@ def test_get_spline_coeffs():
     
     ## try with one point `x`
     index_list, multi_index_list, coeff_list = get_spline_coeffs(
-            params=params, x = [4.5, 2.5])
+            params=params, x = [4.5, 2.5], crop_x=False)
     assert np.array(multi_index_list).shape == (16, 2)
     
     ## try with 1D batch of points
     index_list, multi_index_list, coeff_list = get_spline_coeffs(
-            params=params, x=np.ones([10, 2]))
+            params=params, x=np.ones([10, 2]), crop_x=False)
     assert np.array(multi_index_list).shape == (16, 10, 2)
     
     ## try with 2D batch of points
     index_list, multi_index_list, coeff_list = get_spline_coeffs(
-            params=params, x=np.ones([10, 7, 2]))
+            params=params, x=np.ones([10, 7, 2]), crop_x=False)
     assert np.array(multi_index_list).shape == (16, 10, 7, 2)
          
 #%%
@@ -111,6 +111,14 @@ def test_evaluate_interpolator_in_graph_mode():
                        tf_interpolate_and_evaluate(x))
 
 
+def test_Interpolator():
+    def fun(x):
+        return tf.stack([tf.sin(x[..., 0]), tf.cos(x[..., 1])], axis=-1)
+    
+    params = [tf.linspace(0., np.pi, 10), tf.linspace(0., np.pi, 7)]
+    
+    itp = Interpolator.from_fun(params, fun)
+    assert np.allclose(itp([0,0]), [0, 1])
 
 
 #%%
@@ -120,3 +128,5 @@ if __name__ == "__main__":
     test_get_spline_coeffs()
     test_evaluate_interpolator()
     test_evaluate_interpolator_in_graph_mode()
+    test_Interpolator()
+    print("Done.")

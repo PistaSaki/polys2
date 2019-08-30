@@ -1,8 +1,10 @@
+"""Lightweight module for intepolation using Catmull-Rom splines."""
+
 import tensorflow as tf
 from tensorflow import Tensor
 from tensorflow.keras import backend as K
 from pitf import nptf
-from typing import List, Tuple
+from typing import List, Tuple, Callable
 
 from .poly import get_bin_indices    
     
@@ -74,7 +76,8 @@ def get_spline_coeffs_1d(controls, t, method = None, dif = False, dtype=None
     
 def get_spline_coeffs( 
         params: List[Tensor], 
-        x: Tensor, 
+        x: Tensor,
+        crop_x: bool,
         method = None, 
         derivative:int = None, 
         dtype=None
@@ -103,6 +106,12 @@ def get_spline_coeffs(
     """
     dtype = dtype or K.floatx()
     x = tf.cast(x, dtype)
+    if crop_x:
+        min_par = tf.cast(tf.stack([c[0] for c in params]), dtype)
+        max_par = tf.cast(tf.stack([c[-1] for c in params]), dtype)
+                
+        x = tf.maximum(min_par, tf.minimum(x, max_par))
+    
     
     index_list = [0]
     multi_index_list = [[]]
@@ -135,6 +144,8 @@ def evaluate_interpolator_one_x(params, values, x, raveled=True, dtype=None):
     ])   
     
     return ret
+
+    
 
     
 def evaluate_interpolator(
@@ -172,16 +183,8 @@ def evaluate_interpolator(
         tf.assert_equal(values.shape[:len(params)], 
                         [len(c) for c in params], message)
         
-    floatX = nptf.np_dtype(values)
-    x = tf.cast(x, dtype=floatX)
     
-    if crop_x:
-        min_par = tf.cast(tf.stack([c[0] for c in params]), floatX)
-        max_par = tf.cast(tf.stack([c[-1] for c in params]), floatX)
-                
-        x = tf.maximum(min_par, tf.minimum(x, max_par))
-    
-    ## see below why we fret so much abou these shapes
+    ## see below why we fret so much about these shapes
     batch_shape = tf.shape(x)[:-1]
     codomain_shape =(tf.shape( values)[1:] if raveled 
                     else tf.shape( values)[len(params):])
@@ -194,9 +197,11 @@ def evaluate_interpolator(
         axis = 0
     )
     
-    indices, multi_indices, coeffs = get_spline_coeffs(params, x)
-    ## now `indices` is an ordinary list of 1D Tensors 
-    ## coeffs
+    ##
+    dtype = nptf.np_dtype(values)
+    indices, multi_indices, coeffs = get_spline_coeffs(
+            params, x, crop_x=crop_x, dtype=dtype)
+    ## 
     
     if raveled:
         ret = tf.add_n([ 
@@ -213,115 +218,97 @@ def evaluate_interpolator(
     return ret        
 
 
-###
-## The rest is untested
-#
-#
-#class InterpolatorEvaluator_tf:
-#    """This class does the same job as `evaluate_interpolator`.
-#    
-#    However when hou have one large batch of `x` and you want to evaluate many
-#    interpolators at `x` then it is much more efficient to create one
-#    fixed instance of `InterpolatorEvaluator_tf` and then evaluate using that.
-#    
-#    Attributes:
-#        params: list of vectors
-#        x: tensor of shape `[n]` or `[batch_len, n]`
-#        indices: list of length 4**n of integer tensors of shape `()` or `[batch_len]`
-#        coeffs: list of length 4**n of float tensors of shape `()` or `[batch_len]`
-#        
-#        
-#    """
-#    def __init__(self, params, x, crop_x = True, name = "interpolator_evaluator"):
-#        """
-#        Args:
-#            params: is a list of len `n` of 1D tensors. Here `n` is the dimension 
-#                of the domain of our interpolators.
-#            x: a tensor of shape `[batch_len, n]`, or `[n]`. Point(s) where we evaluate.
-#            name: string to create tensorflow name_scope
-#        """
-#        assert len(x.shape) in [1, 2]
-#        self.name = name
-#        floatX = nptf.np_dtype(x)
-#    
-#        with tf.name_scope(self.name):
-#            if crop_x:
-#                min_par = tf.cast(tf.stack([c[0] for c in params]), floatX)
-#                max_par = tf.cast(tf.stack([c[-1] for c in params]), floatX)
-#                if len(x.shape) == 2:
-#                    min_par = min_par[None, :]
-#                    max_par = max_par[None, :]
-#                x = tf.maximum(min_par, tf.minimum(x, max_par))
-#        
-#            
-#            self.params = params
-#            self.x = x
-#            self.indices, self.coeffs = get_spline_coeffs(params, x, ravel_multi_index=True)
-#        
-#    def eval_itp(self, values):
-#        """
-#        Args:
-#            values: tensor containig values of our interpolator at the control points.
-#             It has shape `[n_control_pts] + codomain_shape` where 
-#             `n_control_pts = np.prod([len(c) for c in params])`
-#             
-#        Return:
-#            a tensor of shape `[batch_len] + codomain_shape` or of `codomain_shape`
-#            depending on whether `x` is a batch of points or just one point.
-#        """
-#        x = self.x
-#        
-#        codomain_shape = tf.shape( values)[1:]
-#        codomain_ndim = tf.size(codomain_shape)
-#        coeff_new_shape = tf.concat(
-#            [
-#                tf.constant([-1], dtype = tf.int32), 
-#                tf.ones([codomain_ndim], dtype = tf.int32)
-#            ],
-#            axis = 0
-#        )
-#
-#        ret = tf.add_n([ 
-#            tf.reshape(c, coeff_new_shape) * tf.gather(values, i) 
-#            for i, c in zip(self.indices, self.coeffs)
-#        ])   
-#
-#        if len(x.shape) == 1:
-#            ret = ret[0]
-#            ret.set_shape(values.shape[1:])
-#            return ret
-#        elif len(x.shape) == 2:
-#            ret.set_shape([x.shape[0]] + list(values.shape)[1:] )
-#            return ret
-#        
-#    def __call__(self, values):
-#        return self.eval_itp(values)
-#    
-#    
-#class Interpolator_tf:
-#    def __init__(self, params, values, raveled = False):
-#        self.params = params
-#        self.var_ndim = var_ndim = len(params)
-#        
-#        if raveled:
-#            self.raveled_values = values
-#        else:
-#            self.unraveled_values = values
-#            old_shape = tf.shape(values)
-#            
-#            new_shape = tf.concat(
-#                values = [
-#                    tf.reduce_prod(old_shape[:var_ndim], keepdims=True),
-#                    old_shape[var_ndim:]
-#                ], 
-#                axis = 0
-#            )
-#            self.raveled_values = tf.reshape(values, new_shape)
-#            
-#    def __call__(self, x):
-#        return evaluate_interpolator(
-#            params = self.params,
-#            values = self.raveled_values,
-#            x = x,
-#            raveled = True
-#        )
+class InterpolatorEvaluator:
+    """This class does the same job as `evaluate_interpolator`.
+    
+    However when hou have one large batch of `x` and you want to evaluate many
+    interpolators at `x` then it is much more efficient to create one
+    fixed instance of `InterpolatorEvaluator` and then evaluate using that.
+    
+    Actually, we could replace `evaluate_interpolator` function by this class.
+        
+    """
+    def __init__(self, params:List[Tensor], x:Tensor, crop_x:bool=True, 
+                 dtype=None):
+        self.dtype = dtype or K.floatx()
+        self.params = params
+        self.x = tf.cast(x, self.dtype)
+        self.indices, self.multi_indices, self.coeffs = get_spline_coeffs(
+            params, x, crop_x=crop_x, dtype=self.dtype)
+        
+    def __call__(self, values: Tensor, raveled:bool=True) -> Tensor:
+        params = self.params
+        x = self.x
+        indices, multi_indices, coeffs = self.indices, self.multi_indices, self.coeffs
+        ##
+        values = tf.cast(values, self.dtype)
+        ##
+        
+        if raveled:
+            message = "Incompatible shapes, consider changing `raveled` argument."
+            tf.assert_equal(values.shape[0], 
+                            tf.reduce_prod([len(c) for c in params]), message)
+        else:
+            message = "Incompatible shapes, consider changing `raveled` argument."
+            tf.assert_equal(values.shape[:len(params)], 
+                            [len(c) for c in params], message)
+            
+        
+        ## see below why we fret so much about these shapes
+        batch_shape = tf.shape(x)[:-1]
+        codomain_shape =(tf.shape( values)[1:] if raveled 
+                        else tf.shape( values)[len(params):])
+        codomain_ndim = tf.size(codomain_shape)
+        coeff_new_shape = tf.concat(
+            [
+                batch_shape, 
+                tf.ones([codomain_ndim], dtype = tf.int32)
+            ],
+            axis = 0
+        )
+        
+            
+        if raveled:
+            ret = tf.add_n([ 
+                tf.reshape(c, coeff_new_shape) * tf.gather(values, i) 
+                for i, c in zip(indices, coeffs)
+            ])
+        else:
+            ret = tf.add_n([ 
+                tf.reshape(c, coeff_new_shape) * tf.gather_nd(values, mi) 
+                for mi, c in zip(multi_indices, coeffs)
+            ])
+            
+        
+        return ret        
+    
+class Interpolator:
+    def __init__(self, params:List[Tensor], values:Tensor,
+                 raveled=False, crop_x:bool=True, dtype=None):
+        self.params = params
+        self.values = values
+        self.raveled = raveled
+        self.crop_x = crop_x
+        self.dtype = dtype or self.values.dtype
+        
+    @classmethod
+    def from_fun(cls, params:List[Tensor], fun:Callable[[Tensor], Tensor], 
+                 raveled=False, crop_x:bool=True, dtype=None):
+        
+        dtype = dtype or K.floatx()
+        grid = tf.stack(tf.meshgrid(*params, indexing="ij"), axis=-1)
+        if raveled:
+            grid = tf.reshape(grid, shape=[-1, len(params)])
+        grid = tf.cast(grid, dtype)
+            
+        values = fun(grid)
+            
+        return cls(params=params, values=values, raveled=raveled, 
+                   crop_x=crop_x, dtype=dtype)
+            
+    def __call__(self, x: Tensor) -> Tensor:
+        evaluator = InterpolatorEvaluator(
+            params=self.params, x=x, crop_x=self.crop_x, 
+            dtype=self.dtype)
+        
+        return evaluator(values=self.values, raveled=self.raveled)
