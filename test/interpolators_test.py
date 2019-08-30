@@ -119,6 +119,23 @@ def test_Interpolator():
     
     itp = Interpolator.from_fun(params, fun)
     assert np.allclose(itp([0,0]), [0, 1])
+    
+def test_Interpolator__dict_values():
+    def fun(x):
+        return {"sin": tf.sin(x), "cos": tf.cos(x)}
+    
+    params = [tf.linspace(0., np.pi, 10)]
+    
+    itp = Interpolator.from_fun(params, fun)
+    res = itp([0])
+    assert isinstance(res, dict)
+    assert np.allclose(res["sin"], 0)
+    
+    ## try it in graph-mode
+    itp = tf.function(itp)
+    res = itp([0])
+    assert isinstance(res, dict)
+    assert np.allclose(res["sin"], 0)
 
 
 #%%
@@ -129,4 +146,7 @@ if __name__ == "__main__":
     test_evaluate_interpolator()
     test_evaluate_interpolator_in_graph_mode()
     test_Interpolator()
+    test_Interpolator__dict_values()
     print("Done.")
+
+#%%

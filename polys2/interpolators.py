@@ -236,7 +236,7 @@ class InterpolatorEvaluator:
         self.indices, self.multi_indices, self.coeffs = get_spline_coeffs(
             params, x, crop_x=crop_x, dtype=self.dtype)
         
-    def __call__(self, values: Tensor, raveled:bool=True) -> Tensor:
+    def _call_with_tensor_values(self, values: Tensor, raveled:bool=True) -> Tensor:
         params = self.params
         x = self.x
         indices, multi_indices, coeffs = self.indices, self.multi_indices, self.coeffs
@@ -280,7 +280,17 @@ class InterpolatorEvaluator:
             ])
             
         
-        return ret        
+        return ret 
+    
+    
+    def __call__(self, values: Tensor, raveled:bool=True) -> Tensor:
+        if isinstance(values, dict):
+            return {k: self(v, raveled) for k, v in values.items()}
+            
+        return self._call_with_tensor_values(values=values, raveled=raveled)
+        
+            
+    
     
 class Interpolator:
     def __init__(self, params:List[Tensor], values:Tensor,
