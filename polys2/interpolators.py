@@ -16,7 +16,6 @@ def CR_spline_coeffs(t0, t1, t2, t3, t, dif = False, dtype = None) -> List[Tenso
     """
     dtype = dtype or K.floatx()
     t0, t1, t2, t3, t = [tf.cast(x, dtype) for x in [t0, t1, t2, t3, t]]
-    assert t0.shape == t1.shape == t2.shape == t3.shape
     
     s = (t - t1) / (t2 - t1)
     

@@ -132,10 +132,17 @@ def test_Interpolator__dict_values():
     assert np.allclose(res["sin"], 0)
     
     ## try it in graph-mode
-    itp = tf.function(itp)
-    res = itp([0])
+    itp_tf = tf.function(itp)
+    res = itp_tf([0])
     assert isinstance(res, dict)
     assert np.allclose(res["sin"], 0)
+    
+    ## try it in graph-mode with given signature
+    input_signature=(tf.TensorSpec(shape=[None, 1], dtype=tf.float32), )
+    itp_tf = tf.function(input_signature=input_signature)(itp)
+    res = itp_tf([[0], [1], [2]])
+    assert isinstance(res, dict)
+    
 
 
 #%%
