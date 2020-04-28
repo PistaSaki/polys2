@@ -3,7 +3,7 @@
 import tensorflow as tf
 from tensorflow import Tensor
 from tensorflow.keras import backend as K
-from pitf import nptf
+from polys2 import nptf
 from typing import List, Tuple, Callable
 
 from .poly import get_bin_indices    

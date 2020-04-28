@@ -5,9 +5,7 @@ import itertools as itt
 from scipy.special import factorial, binom
 from matplotlib import pyplot as pl
 
-from pitf import ptf, nptf
-from pitf.ptf import is_tf_object
-from . import tensor_utils as pit
+from polys2 import nptf
 
 from .batch_utils import Batched_Object
 from .engine import (array_poly_prod, eval_poly, get_1D_Taylor_matrix,

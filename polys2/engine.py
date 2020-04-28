@@ -7,7 +7,7 @@ import tensorflow as tf
 
 from scipy.special import binom
 import numpy.linalg as la
-from pitf import nptf
+from polys2 import nptf
 
 
 from . import tensor_utils as pit

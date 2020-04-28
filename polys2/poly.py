@@ -5,8 +5,8 @@ import itertools as itt
 from scipy.special import factorial, binom
 from typing import Union, Tuple, List
 
-from pitf import ptf, nptf
-from pitf.ptf import is_tf_object
+from polys2 import nptf
+from polys2.nptf import is_tf_object
 from . import tensor_utils as pit
 
 from .batch_utils import Batched_Object
@@ -117,8 +117,8 @@ class Poly(Batched_Object, Val_Indexed_Object):
             
         assert all([dim == n for dim in a_shape[batch_ndim:]])
         
-        if ptf.is_tf_object(a):
-            a_np = ptf.unstack_to_array(a, start_index=batch_ndim)
+        if is_tf_object(a):
+            a_np = nptf.unstack_to_array(a, start_index=batch_ndim)
             f_np = Poly.from_tensor(a_np, batch_ndim=0)
             ## there are some zeros among coeffs of f_np so replace by tf tensors of appropriate shape
             batch_shape = tf.shape(a)[:batch_ndim]
