@@ -1,0 +1,6 @@
+tensorflow
+scipy
+matplotlib
+jupyter
+ipywidgets
+
