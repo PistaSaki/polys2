@@ -1,4 +1,5 @@
 tensorflow
+numpy
 scipy
 matplotlib
 jupyter

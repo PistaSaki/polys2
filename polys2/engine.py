@@ -4,6 +4,9 @@ Keeping things simple, no object-oriented structure.
 """
 import numpy as np
 import tensorflow as tf
+from tensorflow import Tensor
+from tensorflow.keras import backend as K
+from tensorflow.keras.backend import ndim
 
 from scipy.special import binom
 import numpy.linalg as la
@@ -35,9 +38,6 @@ def get_monomials(x, degs):
         return x[..., None] ** tf.range(deg, dtype=x.dtype)
     
     assert x.shape[-1] == len(degs)
-    
-    # sometimes degs are tf.Dimension. Convert to ints:
-    degs = [int(d) for d in degs]
     
     ret = 1
     for i in range(x.shape[-1]):
@@ -75,9 +75,6 @@ def eval_poly(coef, x, batch_ndim = None, var_ndim = None, val_ndim = None, ):
             )
             return n
         
-#    if is_tf_object(x):
-#        assert all(k is not None for k in [batch_ndim, var_ndim, val_ndim])
-#    else:
     var_ndim = check_or_infer(var_ndim, int(x.shape[-1]), "var_ndim")
     batch_ndim = check_or_infer(batch_ndim, len(x.shape) - 1, "batch_ndim")
     val_ndim = check_or_infer(val_ndim, len(coef.shape) - batch_ndim - var_ndim, "val_ndim")
@@ -92,11 +89,6 @@ def eval_poly(coef, x, batch_ndim = None, var_ndim = None, val_ndim = None, ):
     )
 
 
-
-
-
-
-#%%
 def get_1D_Taylor_matrix(a, deg, trunc = None):
     """ Return matrix with shape `[trunc, deg]` af Taylor map at `a`.
     
@@ -184,70 +176,85 @@ def get_Catmul_Rom_Taylors_1D(coef, control_index, control_times, added_index):
     
     
     
-    
+def _tf_ravel_multi_index(multi_index, dims):
+    strides = tf.math.cumprod(dims, axis=-1, reverse=True, exclusive=True)
+    return tf.reduce_sum(multi_index * strides, axis=-1)
 
-def array_poly_prod(a, b, batch_ndim = 0, var_ndim = None, truncation = None):
+
+@tf.function
+def array_poly_prod(a, b, batch_ndim=0, var_ndim=None, truncation=None, dtype=None) -> Tensor:
     """
-    `a`, `b` are np.arrays
-    truncation can be None, number or an array, 
-    specifying the maximal allowed degrees  in the product.
+    Ramark:
+        this function is decorated by `tf.function` to circumvent the problem described in `autograph_problem.py`.
     """
-    ## take `a` to be the polynomial with values of lower ndim
-    if a.ndim > b.ndim:
+    dtype = dtype or K.floatx()
+    a = tf.cast(a, dtype)
+    b = tf.cast(b, dtype)
+
+    # take `a` to be the polynomial with values of lower ndim
+    if ndim(a) > ndim(b):
         a, b = b, a
-        
-    ## if `var_ndim` is missing, infer from shapes
+
+    # if `var_ndim` is missing, infer from shapes
     if var_ndim is None:
-        var_ndim = a.ndim - batch_ndim
-        
-    ## check whether `a` has scalar values
-    assert (a.ndim == batch_ndim + var_ndim) or (a.ndim == b.ndim), (
-        "You have two possibilities: " + 
-        "either the values of the two polynomials have the same ndim, " +
-        "or one of them has scalar values."        
-    )
-    
-    ## shape of values of the resulting polynomial
-    val_shape = b.shape[batch_ndim + var_ndim:]
-    
-    ## add some dimensions at the end of `a` so that 
-    ## it has the same ndim as `b`
-    a = a[(Ellipsis, ) + (None, ) * (b.ndim - a.ndim)]
-    
-    ## degrees of the polys
-    degs_a, degs_b = [np.array(x.shape)[batch_ndim: batch_ndim + var_ndim] for x in [a,b] ]
-    deg_c = degs_a + degs_b - 1
-    
+        var_ndim = ndim(a) - batch_ndim
+
+    # check whether `a` has scalar values or
+    tf.Assert((ndim(a) == batch_ndim + var_ndim) | (ndim(a) == ndim(b)), data=[ndim(a), ndim(b)])
+    #           message=(
+    #     "You have two possibilities: either the values of the two polynomials have the same ndim "
+    #     "or one of them has scalar values.")
+    # )
+
+    # shape of values of the resulting polynomial
+    val_shape = tf.shape(b)[batch_ndim + var_ndim:]
+
+    # add some dimensions at the end of `a` so that it has the same ndim as `b`
+    a = a[(Ellipsis,) + (None,) * (ndim(b) - ndim(a))]
+
+    # degrees of the polys
+    degs_a, degs_b = [tf.shape(x)[batch_ndim: batch_ndim + var_ndim] for x in [a, b]]
+    degs_c = degs_a + degs_b - 1
+
     if truncation is not None:
-        truncation = truncation * np.ones_like(deg_c)
-        deg_c = np.array([min(t, d) for t, d in zip(truncation, deg_c)])
-        
-    c_batch_shape = pib.get_common_broadcasted_shape([
-            a.shape[:batch_ndim], b.shape[:batch_ndim]
-    ])
-    
-    dtype = np.promote_types(nptf.np_dtype(a), nptf.np_dtype(b))
-    c = np.zeros( c_batch_shape + list(deg_c) + list(val_shape), dtype=dtype)
-    
-    
-    for i in range(np.prod(degs_a)):
-        mi = np.unravel_index(i, degs_a)
+        degs_c = tf.minimum(degs_c, truncation)
 
-        for j in range(np.prod(degs_b)):
-            mj = np.unravel_index(j, degs_b)
-            
-            #print(mi, mj, deg_c)
+    c_batch_shape = tf.broadcast_dynamic_shape(tf.shape(a)[:batch_ndim], tf.shape(b)[:batch_ndim])
 
-            if all(np.add(mi, mj) < deg_c):
-                batches = (slice(None),)*batch_ndim
-                a_index = batches + mi
-                b_index = batches + mj
-                c_index = batches + tuple(np.add(mi, mj))
-                c[c_index] += a[a_index] * b[b_index]
- 
+    def flatten_polynomial_dimensions(x):
+        s = tf.shape(x)
+        ndim = tf.shape(s)[0]
+        batch_shape = s[:batch_ndim]
+        degs_shape = s[batch_ndim: batch_ndim+var_ndim]
+        val_shape = s[batch_ndim+var_ndim:]
+        flatt_degs_shape = tf.concat([batch_shape, tf.reduce_prod(degs_shape, keepdims=True), val_shape], axis=0)
+        x = tf.reshape(x, flatt_degs_shape)
+        return tf.transpose(x, perm=tf.concat([[batch_ndim], tf.range(batch_ndim), tf.range(batch_ndim + 1, ndim)], axis=0))
+
+    a_flat = flatten_polynomial_dimensions(a)
+    b_flat = flatten_polynomial_dimensions(b)
+    c_array = tf.TensorArray(dtype=dtype, size=tf.reduce_prod(degs_c))
+    element_shape = tf.concat([c_batch_shape, val_shape], axis=0)
+    for i in tf.range(tf.reduce_prod(degs_c)):
+        c_array = c_array.write(i, tf.zeros(element_shape, dtype))
+
+    for i in tf.range(tf.reduce_prod(degs_a)):
+        mi = tf.unravel_index(i, degs_a)
+
+        for j in tf.range(tf.reduce_prod(degs_b)):
+            mj = tf.unravel_index(j, degs_b)
+
+            m = mi + mj
+            if tf.reduce_all(m < degs_c):
+                n = _tf_ravel_multi_index(m, dims=degs_c)
+                c_array = c_array.write(n, c_array.read(n) + a_flat[i] * b_flat[j])
+
+    c_shape = tf.concat([c_batch_shape, degs_c, val_shape], axis=0)
+    c = tf.stack(c_array.stack(), axis=batch_ndim)
+    c = tf.reshape(c, c_shape)
+
     return c
 
-    
 
 def get_spline_from_taylors_1D_OLD(taylor_grid_coeffs, bin_axis, polynom_axis, control_times):
     par = control_times

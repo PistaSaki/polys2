@@ -69,13 +69,13 @@ class Poly(Batched_Object, Val_Indexed_Object):
         self.coef = coef
         self.batch_ndim = batch_ndim
         if var_ndim is None:
-            var_ndim = coef.ndim - batch_ndim - val_ndim    
+            var_ndim = tf.rank(coef) - batch_ndim - val_ndim
         self.var_ndim = var_ndim
         
         self.val_ndim = val_ndim
         
         try:
-            self.degs = [int(d) for d in self.coef.shape[batch_ndim: batch_ndim + var_ndim]]
+            self.degs = tf.shape(coef)[batch_ndim: batch_ndim + var_ndim]
         except TypeError as err:
             raise Exception(
                 err, 
@@ -84,13 +84,10 @@ class Poly(Batched_Object, Val_Indexed_Object):
                     coef.shape, self.batch_ndim, self.var_ndim, self.val_ndim
                 )
             )
-            
-                     
-        assert len(coef.shape) == self.batch_ndim + self.var_ndim + self.val_ndim,(
-            "The sum of batch_ndim = {}, var_ndim = {}, val_ndim = {} "
-            "should be equal to coef_ndim = {}.".format(
-                self.batch_ndim, self.var_ndim, self.val_ndim, coef.ndim
-            )
+
+        tf.assert_equal(tf.rank(coef), self.batch_ndim + self.var_ndim + self.val_ndim, message=(
+            f"The sum of batch_ndim = {self.batch_ndim}, var_ndim = {self.var_ndim}, val_ndim = {self.val_ndim} "
+            f"should be equal to coef_ndim = {tf.rank(coef)}.")
         )
         
     @staticmethod
@@ -184,12 +181,14 @@ class Poly(Batched_Object, Val_Indexed_Object):
     def __mul__(self, other, truncation = None):
             
         if isinstance(other, Poly):
-            assert self.batch_ndim == other.batch_ndim
-            assert self.var_ndim == other.var_ndim
-            assert self.val_ndim == 0 or other.val_ndim == 0 or (self.val_ndim == other.val_ndim), (
-                "At least one of the two polynomials should have scalar values or both should have the same values. " + 
-                "This can be generalised but is not implemented. "
-            )
+            tf.assert_equal(self.batch_ndim, other.batch_ndim)
+            tf.assert_equal(self.var_ndim, other.var_ndim)
+            # tf.Assert(self.val_ndim == 0 | other.val_ndim == 0 | (self.val_ndim == other.val_ndim),
+            #           data=[self.val_ndim, other.val_ndim])
+            #           (
+            #     "At least one of the two polynomials should have scalar values or both should have the same values. " +
+            #     "This can be generalised but is not implemented. "
+            # )
 
             return Poly(
                 coef = array_poly_prod(

@@ -1,18 +1,9 @@
 import numpy as np
 import tensorflow as tf
 
-from polys2.engine import (get_monomials, eval_poly, get_1D_Taylor_matrix,
-        get_1d_Taylor_coef_grid, 
-        get_1D_Taylors_to_spline_patch_matrix,
-        get_1D_integral_of_piecewise_poly
-        )
-#%%
-# test in graph-mode
-get_monomials = tf.function(get_monomials) 
-eval_poly = tf.function(eval_poly)
+from polys2.engine import (get_monomials, eval_poly, get_1D_Taylor_matrix, get_1d_Taylor_coef_grid,
+                           get_1D_Taylors_to_spline_patch_matrix, get_1D_integral_of_piecewise_poly, array_poly_prod)
 
-
-#%% 
 
 def test_get_monomials():
     
@@ -35,6 +26,11 @@ def test_get_monomials():
        [[ 1,  3,  9],
         [ 2,  6, 18]]]
     )
+
+    # try in graph mode
+    gm = tf.function(get_monomials)
+    mons = gm(x=tf.constant([1, 2]), degs=tf.constant([2, 3]))
+    assert mons.shape == [2, 3]
  
 def test_eval_poly():
     ev = eval_poly(
@@ -72,8 +68,14 @@ def test_get_1D_integral_of_piecewise_poly():
         control_times = [-1, 0, 1]
     )
 
+def test_poly_prod():
+    @tf.function
+    def square(a):
+        return array_poly_prod(a, a)
 
-    
+    assert np.allclose(square(tf.constant([1, 2, 3], dtype=tf.float32)), [ 1, 4, 10, 12, 9])
+
+
 if __name__ == "__main__":
     test_get_monomials()
     test_eval_poly()
@@ -82,3 +84,4 @@ if __name__ == "__main__":
     test_get_1d_Taylor_coef_grid()
     test_get_1D_Taylors_to_spline_patch_matrix()
     test_get_1D_integral_of_piecewise_poly()
+    test_poly_prod()
