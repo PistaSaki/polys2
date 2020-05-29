@@ -38,7 +38,19 @@ def test_poly_multiplication_in_graph_mode():
     assert np.allclose(poly_square(tf.constant([1, 2, 3], dtype=tf.float32)), [1., 4., 10., 12., 9.])
 
 
+def test_poly_addition_in_graph_mode():
+    @tf.function
+    def fun(coef):
+        p = Poly(coef)
+        return (p + p).coef
+
+    val = fun(tf.constant([1, 2, 3], dtype=tf.float32))
+    print(val)
+    assert np.allclose(val, [2, 4, 6])
+
 if __name__ == "__main__":
+    test_poly_multiplication_in_graph_mode()
+    test_poly_addition_in_graph_mode()
     test_1d_poly()
 
 

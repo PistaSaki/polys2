@@ -231,23 +231,22 @@ class Poly(Batched_Object, Val_Indexed_Object):
     @property
     def val_shape(self):
         return nptf.shape(self.coef)[self.batch_ndim + self.var_ndim:]
-    
-        
+
     def __add__(self, other):    
         if isinstance(other, Poly):
-            assert self.batch_ndim == other.batch_ndim
-            assert self.var_ndim == other.var_ndim
-            assert self.val_ndim == other.val_ndim
-            
+            tf.assert_equal(self.batch_ndim, other.batch_ndim)
+            tf.assert_equal(self.var_ndim, other.var_ndim)
+            tf.assert_equal(self.val_ndim, other.val_ndim)
+
             f, g = self, other
             f = f.pad_degs(g.degs)
             g = g.pad_degs(f.degs)
 
             return Poly(
-                coef = f.coef + g.coef,
-                batch_ndim = self.batch_ndim,
-                var_ndim = self.var_ndim,
-                val_ndim = self.val_ndim
+                coef=f.coef + g.coef,
+                batch_ndim=self.batch_ndim,
+                var_ndim=self.var_ndim,
+                val_ndim=self.val_ndim
             )
         else:
             return self + Poly.constant(other, self.batch_ndim, self.var_ndim, self.val_ndim)
@@ -330,30 +329,18 @@ class Poly(Batched_Object, Val_Indexed_Object):
             var_ndim = self.var_ndim, 
             val_ndim = self.val_ndim
         )
-    
-    
+
     def pad_degs(self, minimal_degs):
-        ## In this first part we can work solely in numpy (i.e. with tangible numbers)
-        paddings = np.concatenate([
-                np.zeros(self.batch_ndim),
-                np.maximum(self.degs, minimal_degs) - self.degs,
-                np.zeros(self.val_ndim),
-            ]).astype(np.int)
+        paddings = tf.concat([
+                tf.zeros(self.batch_ndim, dtype=tf.int32),
+                tf.maximum(self.degs, minimal_degs) - self.degs,
+                tf.zeros(self.val_ndim, dtype=tf.int32),
+            ], axis=0)
         
-        paddings = np.stack([
-                nptf.zeros_like(paddings), 
-                paddings
-        ]).T
-        
-        #print("paddings =", paddings)
-        
-        ## Only the padding must be done in appropriate module (np/tf)
-        return Poly(
-            coef = nptf.pad(self.coef, paddings=paddings), 
-            batch_ndim = self.batch_ndim, 
-            var_ndim = self.var_ndim, 
-            val_ndim = self.val_ndim
-        )
+        paddings = tf.stack([tf.zeros_like(paddings), paddings], axis=1)
+
+        return Poly(coef=tf.pad(self.coef, paddings=paddings),
+                    batch_ndim=self.batch_ndim, var_ndim=self.var_ndim, val_ndim=self.val_ndim)
         
         
     
