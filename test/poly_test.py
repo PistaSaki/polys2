@@ -26,7 +26,8 @@ def test_1d_poly():
     assert np.allclose(q.der().coef, [1, 0])
     
     # test unit_like
-    assert np.allclose(q.unit_like().coef, [1, 0, 0])
+    assert q.unit_like().coef.shape == [1]
+    assert np.allclose(q.unit_like().coef, [1])
 
 
 def test_poly_multiplication_in_graph_mode():
@@ -68,10 +69,25 @@ def test_poly_call_in_graph_mode():
     # assert np.allclose(val, 5)
 
 
+def test_truncated_exp_in_graph_mode():
+    def fun(coef):
+        p = Poly(coef)
+        return p.truncated_exp().coef
+
+    fun1 = tf.function(fun)
+    val = fun1(tf.constant([0., 1, 0]))
+    assert np.allclose(val, [1, 1, 1 / 2])
+
+    fun1 = tf.function(fun, input_signature=[tf.TensorSpec([None])])
+    val = fun1(tf.constant([0., 1, 0]))
+    assert np.allclose(val, [1, 1, 1 / 2])
+
+
 if __name__ == "__main__":
     test_poly_multiplication_in_graph_mode()
     test_poly_addition_in_graph_mode()
     test_poly_call_in_graph_mode()
+    test_truncated_exp_in_graph_mode()
     test_1d_poly()
 
 

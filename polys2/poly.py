@@ -11,8 +11,7 @@ from polys2.nptf import is_tf_object
 from . import tensor_utils as pit
 
 from .batch_utils import Batched_Object
-from .engine import (array_poly_prod, eval_poly, get_1D_Taylor_matrix,
-        get_1d_Taylor_coef_grid)
+from .engine import (array_poly_prod, eval_poly, get_1D_Taylor_matrix, get_1d_Taylor_coef_grid, find_common_dtype)
 from .plot_utils import plot_fun
 
 
@@ -60,8 +59,7 @@ class Val_Indexed_Object:
     def val(self):
         return Val_Indexer(obj = self)
     
-    
-            
+
 class Poly(Batched_Object, Val_Indexed_Object):
     def __init__(self, coef, batch_ndim = 0, var_ndim = None, val_ndim = 0):
         self.coef = coef
@@ -134,28 +132,12 @@ class Poly(Batched_Object, Val_Indexed_Object):
             coef[bs + tuple(degs)] += a[bs + iii]
 
         return Poly(coef, var_ndim = n, batch_ndim=batch_ndim)
-    
-    def unit_like(p) -> "Poly":
-        """Return a polynomial representing 1 with the same batch_ndim and degrees as `p`.
-        """
-        shape = nptf.shape(p.coef)
-        batch_ndim = p.batch_ndim
-        batch_shape = shape[ : batch_ndim]
-    
-        dtype = nptf.np_dtype(p.coef)
-    
-        ## first construct the coefficients for one-element batch
-        ## (i.e. batch_ndim = 0)
-        one = np.zeros(np.prod(p.degs), dtype)
-        one[0] = 1
-        one = one.reshape([1]*batch_ndim + p.degs)
-    
-        ## add the batch-dimensions
-        one = nptf.ones(batch_shape, dtype)[(Ellipsis,) + (None,) * p.var_ndim] * one
-    
-        return Poly(coef = one, batch_ndim= batch_ndim, var_ndim=p.var_ndim)
-        
-            
+
+    def unit_like(self) -> "Poly":
+        """Return a polynomial representing 1 with the same `batch_ndim`, `var_ndim` and `dtype`."""
+        return Poly.constant(tf.constant(1, dtype=self.dtype),
+                             batch_ndim=self.batch_ndim, val_ndim=self.val_ndim, var_ndim=self.var_ndim)
+
     def __repr__(self):
         s = "Poly( " + str(self.coef) 
         if self.batch_ndim > 0:
@@ -172,8 +154,14 @@ class Poly(Batched_Object, Val_Indexed_Object):
     def __call__(self, x):
         return eval_poly(self.coef, x, batch_ndim = self.batch_ndim, var_ndim=self.var_ndim, val_ndim=self.val_ndim )
     
-    
-    
+    def cast(self, dtype):
+        return Poly(coef=tf.cast(self.coef, dtype),
+                    batch_ndim=self.batch_ndim, var_ndim=self.var_ndim, val_ndim=self.val_ndim)
+
+    @property
+    def dtype(self):
+        return self.coef.dtype
+
     def __mul__(self, other, truncation = None):
             
         if isinstance(other, Poly):
@@ -198,20 +186,20 @@ class Poly(Batched_Object, Val_Indexed_Object):
                 val_ndim = max(self.val_ndim, other.val_ndim)
             )
         else:
-            if isinstance(other, (np.ndarray, tf.Tensor, tf.Variable)):
-                other_ndim = nptf.ndim(other)
-                assert other_ndim <= self.batch_ndim, (
-                    "You are multiplying a polynomial with batch_dim = " + str(self.batch_ndim) +
-                    " by a tensor of ndim = " + str(other_ndim) + "."
-                )
-                other = other[(...,) + (None,) * (self.ndim - other_ndim)]
-            
-            return Poly(
-                coef = self.coef * other,
-                batch_ndim = self.batch_ndim,
-                var_ndim = self.var_ndim,
-                val_ndim = self.val_ndim
+            other = tf.convert_to_tensor(other)
+            dtype = find_common_dtype([self.dtype], [other.dtype])
+            other = tf.cast(other, dtype)
+            self = self.cast(dtype)
+
+            other_ndim = ndim(other)
+            assert other_ndim <= self.batch_ndim, (
+                "You are multiplying a polynomial with batch_dim = " + str(self.batch_ndim) +
+                " by a tensor of ndim = " + str(other_ndim) + "."
             )
+            other = other[(...,) + (None,) * (self.ndim - other_ndim)]
+            
+            return Poly(coef=self.coef * other,
+                        batch_ndim=self.batch_ndim, var_ndim=self.var_ndim, val_ndim=self.val_ndim)
         
     def __rmul__(self, other):
         return self * other
@@ -245,12 +233,15 @@ class Poly(Batched_Object, Val_Indexed_Object):
                 val_ndim=self.val_ndim
             )
         else:
+            other = tf.convert_to_tensor(other)
+            dtype = find_common_dtype([self.dtype], [other.dtype])
+            other = tf.cast(other, dtype)
+            self = self.cast(dtype)
             return self + Poly.constant(other, self.batch_ndim, self.var_ndim, self.val_ndim)
         
     def __radd__(self, other):
         return self + other
-    
-        
+
     def __sub__(self, other):
         return self + (-1) * other
     
@@ -258,10 +249,8 @@ class Poly(Batched_Object, Val_Indexed_Object):
         return (-1) * self + other
         
     def __truediv__(self, other):
-        #assert isinstance(other, numbers.Number), "Unsupported type {}.".format(type(other))
         return 1/other * self
-        
-        
+
     def val_mul(self, a):
         """
         Multiply values by tensor `a` s.t. `a.ndim == self.val_ndim`.
@@ -316,17 +305,13 @@ class Poly(Batched_Object, Val_Indexed_Object):
     
     def truncate_degs(self, limit_degs: Union[int, List[int]]) -> "Poly":
         """Return Poly whose degrees are at most `limit_degs`."""
-        degs = np.minimum(limit_degs, self.degs)
-        selector = [slice(None)]* self.batch_ndim +  [slice(None, int(deg)) for deg in degs]
-        selector = tuple(selector)
-        return Poly(
-            coef = self.coef[selector], 
-            batch_ndim = self.batch_ndim, 
-            var_ndim = self.var_ndim, 
-            val_ndim = self.val_ndim
-        )
+        degs = tf.minimum(limit_degs, self.degs)
+        coef = tf.slice(self.coef, begin=tf.zeros(self.ndim, tf.int32),
+                        size=tf.concat([self.batch_shape, degs, self.val_shape], axis=0))
+        return Poly(coef=coef, batch_ndim=self.batch_ndim, var_ndim=self.var_ndim, val_ndim=self.val_ndim)
 
-    def pad_degs(self, minimal_degs):
+    def pad_degs(self, minimal_degs) -> "Poly":
+        """Return Poly whose degrees are at least `minimal_degs`."""
         paddings = tf.concat([
                 tf.zeros(self.batch_ndim, dtype=tf.int32),
                 tf.maximum(self.degs, minimal_degs) - self.degs,
@@ -337,11 +322,7 @@ class Poly(Batched_Object, Val_Indexed_Object):
 
         return Poly(coef=tf.pad(self.coef, paddings=paddings),
                     batch_ndim=self.batch_ndim, var_ndim=self.var_ndim, val_ndim=self.val_ndim)
-        
-        
-    
-    
-    
+
     def plot(self, start = None, end = None, **kwargs):
         f = self
         assert f.batch_ndim == 0
@@ -405,6 +386,10 @@ class Poly(Batched_Object, Val_Indexed_Object):
             var_ndim = self.var_ndim, 
             val_ndim = val_ndim            
         )
+
+    @property
+    def _all_ndims(self):
+        return dict(val_ndim=self.val_ndim, var_ndim=self.var_ndim, batch_ndim=self.batch_ndim)
         
     def truncated_exp(self, degs = None):
         """Return exponential in the local ring $R[x]/ x^degs$. 
@@ -420,23 +405,29 @@ class Poly(Batched_Object, Val_Indexed_Object):
         a = g.truncate_degs(1)
         b = (g - a).truncate_degs(degs)
 
-        # We conpute exp(g) = exp(a + b) = exp(a) * exp(b)
+        # We compute exp(g) = exp(a + b) = exp(a) * exp(b)
         # `a` is scalar so exp(a) poses no problem.
         exp_a = Poly(
-            coef = nptf.exp(a.coef), 
-            batch_ndim = self.batch_ndim, 
-            var_ndim = self.var_ndim, 
-            val_ndim = self.val_ndim 
+            coef=tf.exp(a.coef),
+            batch_ndim=self.batch_ndim,
+            var_ndim=self.var_ndim,
+            val_ndim=self.val_ndim
         )
         # Since b is nilpotent with highest nonzero power at most n = total degree:
-        n = sum([deg - 1 for deg in degs])
+        n = tf.reduce_sum(tf.cast(degs, tf.int32) - 1)
         # we can calculate exp(b) as sum of the first n + 1 terms of the power series.
 
-        exp_b = 1 + b
-        b_k = b
-        for k in range(2, n+1):
-            b_k = b_k.__mul__(b, truncation = degs)
-            exp_b = exp_b + 1/factorial(k) * b_k
+        exp_b_coef = (1 + b).pad_degs(degs).coef
+        b_k_coef = b.pad_degs(degs).coef
+        sh = b_k_coef.shape
+        factorial_k = 1
+        for k in tf.range(2, n+1):
+            factorial_k = factorial_k * k
+            b_k_coef = array_poly_prod(b_k_coef, b.coef, truncation=degs,
+                                       batch_ndim=self.batch_ndim, var_ndim=self.var_ndim)
+            b_k_coef.set_shape(sh)
+            exp_b_coef = exp_b_coef + b_k_coef / tf.cast(factorial_k, self.dtype)
+        exp_b = Poly(coef=exp_b_coef, **self._all_ndims)
             
         return exp_a * exp_b
 
@@ -492,8 +483,7 @@ class Poly(Batched_Object, Val_Indexed_Object):
             fun_der = lambda k, t: -1 / (-t)**(k+1) * factorial(k),
             degs = degs
         )
-        
-    
+
     def truncated_power(self, exponent, degs = None):
         """Return `self` raised to the exponent (possibly real) truncated to `degs`. 
         """
@@ -502,9 +492,7 @@ class Poly(Batched_Object, Val_Indexed_Object):
             fun_der = lambda k, t: binom(a, k) * factorial(k) * t**(a-k),
             degs = degs
         )
-    
-    
-      
+
     def get_Taylor_grid(self, params, truncs = None):
         from .taylor_grid import TaylorGrid
 
@@ -571,7 +559,7 @@ class Poly(Batched_Object, Val_Indexed_Object):
         
         k2 = k + self.batch_ndim 
         deg = self.degs[k]
-        ndim = nptf.ndim(self.coef)
+        ndim = self.ndim
         
         selector = [slice(None)] * ndim
         selector[k2] = slice(1, None)
@@ -588,15 +576,12 @@ class Poly(Batched_Object, Val_Indexed_Object):
             var_ndim= self.var_ndim,
             val_ndim=self.val_ndim
         )
-        
 
     @staticmethod
     def constant(c, batch_ndim, var_ndim, val_ndim, ):
-        if not is_tf_object(c):
-            c = np.array(c)
-        assert nptf.ndim(c) == 0, "Maybe this method does not do what you want." 
+        tf.assert_equal(ndim(c), 0, "Maybe this method does not do what you want.")
         
-        c = nptf.reshape(c, [1]* (batch_ndim + var_ndim + val_ndim))
+        c = tf.reshape(c, [1]* (batch_ndim + var_ndim + val_ndim))
         return Poly(
             coef = c, 
             batch_ndim = batch_ndim, 

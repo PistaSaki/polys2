@@ -45,6 +45,18 @@ def get_monomials(x, degs):
     return ret
 
 
+def _as_numpy_dtype(dtype):
+    try:
+        return dtype.as_numpy_dtype()
+    except AttributeError:
+        return dtype
+
+
+def find_common_dtype(array_types, scalar_types):
+    return np.find_common_type(array_types=[_as_numpy_dtype(t) for t in array_types],
+                               scalar_types=[_as_numpy_dtype(t) for t in scalar_types])
+
+
 def eval_poly(coef, x, batch_ndim = None, var_ndim = None, val_ndim = None, ):
     """Return value at `x` of polynomial with coefficients `coef`."""
     if var_ndim is None:
@@ -125,8 +137,6 @@ def get_1D_Taylors_to_spline_patch_matrix(a, b, deg):
     #print(Taylors_matrix)
     return la.inv(Taylors_matrix)
                         
-        
-#%%    
 
 def get_Catmul_Rom_Taylors_1D(coef, control_index, control_times, added_index):
     assert len(control_times) == coef.shape[control_index]
