@@ -11,15 +11,8 @@ from tensorflow.keras.backend import ndim
 from scipy.special import binom
 import numpy.linalg as la
 from polys2 import nptf
-
-
 from . import tensor_utils as pit
-from . import batch_utils as pib
 
-#%%
-        
-##################################
-## Auxiliary functions operating directly on np.arrays
 
 def get_monomials(x, degs):
     """ Return all monomials of `x` up to order `degs`.
@@ -52,34 +45,20 @@ def get_monomials(x, degs):
     return ret
 
 
-
-#%%
 def eval_poly(coef, x, batch_ndim = None, var_ndim = None, val_ndim = None, ):
     """Return value at `x` of polynomial with coefficients `coef`."""
-    def check_or_infer(n, n_infered, name):
-        exception_string = (
-                "Problem with shapes ({}): ".format(name) +
-                " coef.shape=" + str(coef.shape) +
-                " x.shape=" + str(x.shape) +
-                " batch_ndim=" + str(batch_ndim) +
-                " var_ndim="+ str(var_ndim) +
-                " val_ndim=" + str(val_ndim)
-            )
-        
-        assert n_infered >= 0, exception_string + "; n_infer < 0" 
-        if n is None:
-            return n_infered
-        else:
-            assert n == n_infered, (
-                exception_string + "; given {} != infered {}".format(n, n_infered)
-            )
-            return n
-        
-    var_ndim = check_or_infer(var_ndim, int(x.shape[-1]), "var_ndim")
-    batch_ndim = check_or_infer(batch_ndim, len(x.shape) - 1, "batch_ndim")
-    val_ndim = check_or_infer(val_ndim, len(coef.shape) - batch_ndim - var_ndim, "val_ndim")
+    if var_ndim is None:
+        var_ndim = x.shape[-1]
+    else:
+        tf.assert_equal(var_ndim, x.shape[-1])
 
-    degs = coef.shape[batch_ndim: batch_ndim + var_ndim]
+    if batch_ndim is None:
+        batch_ndim = ndim(x) - 1
+
+    if val_ndim is None:
+        val_ndim = ndim(coef) - batch_ndim - var_ndim
+
+    degs = tf.shape(coef)[batch_ndim: batch_ndim + var_ndim]
     
     monoms = get_monomials(x, degs = degs)
     monoms = monoms[(Ellipsis, ) + (None, )*val_ndim]

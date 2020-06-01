@@ -30,7 +30,7 @@ def test_1d_poly():
 
 
 def test_poly_multiplication_in_graph_mode():
-    @tf.function
+    @tf.function#(input_signature=[tf.TensorSpec(None, tf.float32)])
     def poly_square(coef):
         p = Poly(coef)
         return (p * p).coef
@@ -48,9 +48,30 @@ def test_poly_addition_in_graph_mode():
     print(val)
     assert np.allclose(val, [2, 4, 6])
 
+
+def test_poly_call_in_graph_mode():
+    def fun(coef, x):
+        p = Poly(coef)
+        return p(x)
+
+    fun1 = tf.function(fun)
+    val = fun1(tf.constant([1, 0, 1], dtype=tf.float32), tf.constant([2], dtype=tf.float32))
+    assert np.allclose(val, 5)
+
+    fun2 = tf.function(fun, input_signature=[tf.TensorSpec([None]), tf.TensorSpec([1])])
+    val = fun2(tf.constant([1, 0, 1], dtype=tf.float32), tf.constant([2], dtype=tf.float32))
+    assert np.allclose(val, 5)
+
+    # The following does not pass yet:
+    # fun3 = tf.function(fun, input_signature=[tf.TensorSpec(None), tf.TensorSpec(None)])
+    # val = fun3(tf.constant([1, 0, 1], dtype=tf.float32), tf.constant([2], dtype=tf.float32))
+    # assert np.allclose(val, 5)
+
+
 if __name__ == "__main__":
     test_poly_multiplication_in_graph_mode()
     test_poly_addition_in_graph_mode()
+    test_poly_call_in_graph_mode()
     test_1d_poly()
 
 

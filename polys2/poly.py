@@ -1,5 +1,6 @@
 import numpy as np
 import tensorflow as tf
+from tensorflow.keras.backend import ndim
 import numbers
 import itertools as itt
 from scipy.special import factorial, binom
@@ -41,10 +42,7 @@ def get_bin_indices(bins, tt):
     tt_reshaped = tt[..., None]
     bins_reshaped = bins[(None,) * batch_ndim + (slice(None),)]
                          
-    return tf.reduce_sum(
-        tf.cast( tt_reshaped >= bins_reshaped , np.int32),
-        axis = -1
-    ) - 1
+    return tf.reduce_sum(tf.cast(tt_reshaped >= bins_reshaped, tf.int32), axis=-1) - 1
             
 ####################################
 ## Classes
@@ -69,7 +67,7 @@ class Poly(Batched_Object, Val_Indexed_Object):
         self.coef = coef
         self.batch_ndim = batch_ndim
         if var_ndim is None:
-            var_ndim = tf.rank(coef) - batch_ndim - val_ndim
+            var_ndim = ndim(coef) - batch_ndim - val_ndim
         self.var_ndim = var_ndim
         
         self.val_ndim = val_ndim
@@ -172,8 +170,6 @@ class Poly(Batched_Object, Val_Indexed_Object):
         return self.val_ndim == 0
     
     def __call__(self, x):
-        if not is_tf_object(x):
-            x = np.array(x)
         return eval_poly(self.coef, x, batch_ndim = self.batch_ndim, var_ndim=self.var_ndim, val_ndim=self.val_ndim )
     
     
@@ -222,7 +218,7 @@ class Poly(Batched_Object, Val_Indexed_Object):
     
     @property
     def batch_shape(self):
-        return nptf.shape(self.coef)[:self.batch_ndim]
+        return tf.shape(self.coef)[:self.batch_ndim]
     
     @property
     def ndim(self):
@@ -230,7 +226,7 @@ class Poly(Batched_Object, Val_Indexed_Object):
     
     @property
     def val_shape(self):
-        return nptf.shape(self.coef)[self.batch_ndim + self.var_ndim:]
+        return tf.shape(self.coef)[self.batch_ndim + self.var_ndim:]
 
     def __add__(self, other):    
         if isinstance(other, Poly):
