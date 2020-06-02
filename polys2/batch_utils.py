@@ -3,6 +3,7 @@ import ipywidgets as ipw
 
 
 def get_common_broadcasted_shape(batch_shapes):
+    batch_shapes = [[int(d) for d in s] for s in batch_shapes]
     ndim = len(batch_shapes[0])
     assert all([ndim == len(shape) for shape in batch_shapes]), "All batches should have the same noof dimensions/indices."
     batch_shape = np.array(batch_shapes).max(axis = 0)

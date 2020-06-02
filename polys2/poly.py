@@ -152,7 +152,7 @@ class Poly(Batched_Object, Val_Indexed_Object):
         return self.val_ndim == 0
     
     def __call__(self, x):
-        return eval_poly(self.coef, x, **self._all_ndims)
+        return eval_poly(self.coef, tf.cast(x, self.dtype), **self._all_ndims)
     
     def cast(self, dtype):
         return Poly(coef=tf.cast(self.coef, dtype),

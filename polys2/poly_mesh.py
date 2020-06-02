@@ -1,20 +1,15 @@
+import itertools as itt
+import numbers
+
 import numpy as np
 import tensorflow as tf
-import numbers
-import itertools as itt
-from scipy.special import factorial, binom
 from matplotlib import pyplot as pl
 
 from polys2 import nptf
-
 from .batch_utils import Batched_Object
-from .engine import (array_poly_prod, eval_poly, get_1D_Taylor_matrix,
-        get_1d_Taylor_coef_grid, get_1D_integral_of_piecewise_poly)
+from .engine import (get_1D_integral_of_piecewise_poly)
 from .plot_utils import plot_fun
-
 from .poly import Poly, get_bin_indices
-
-from typing import Union, Tuple, List
 
 
 def ipow(base, exponent):

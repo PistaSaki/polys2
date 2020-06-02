@@ -1,29 +1,17 @@
-import numpy as np
-import tensorflow as tf
-import numbers
 import itertools as itt
-from scipy.special import factorial, binom
-from matplotlib import pyplot as pl
+
+import numpy as np
 
 from polys2 import nptf
-
 from .batch_utils import Batched_Object
-from .engine import (array_poly_prod, eval_poly, get_1D_Taylor_matrix,
-        get_1d_Taylor_coef_grid, get_1D_integral_of_piecewise_poly,
-        get_integral_of_spline_from_taylors_1D,
-        get_spline_from_taylors_1D,
-        get_Catmul_Rom_Taylors_1D,
-        )
-from .plot_utils import plot_fun
-
-from .poly import Poly, get_bin_indices, Val_Indexed_Object
+from .engine import (get_integral_of_spline_from_taylors_1D,
+                     get_spline_from_taylors_1D,
+                     get_Catmul_Rom_Taylors_1D,
+                     )
+from .poly import Poly, Val_Indexed_Object
 from .poly_mesh import PolyMesh
 
-from typing import Union, Tuple, List
 
-
-
-    
 class TaylorGrid(Batched_Object, Val_Indexed_Object):
     def __init__(self, coef, params, batch_ndim = 0,  val_ndim = 0):
         self.coef = coef
