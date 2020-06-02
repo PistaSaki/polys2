@@ -2,7 +2,7 @@ import numpy as np
 import tensorflow as tf
 
 from polys2.engine import (get_monomials, eval_poly, get_1D_Taylor_matrix, get_1d_Taylor_coef_grid,
-                           get_1D_Taylors_to_spline_patch_matrix, get_1D_integral_of_piecewise_poly, array_poly_prod)
+                           get_1D_Taylors_to_spline_patch_matrix, get_1D_integral_of_piecewise_poly, poly_prod)
 
 
 def test_get_monomials():
@@ -31,7 +31,7 @@ def test_get_monomials():
     gm = tf.function(get_monomials)
     mons = gm(x=tf.constant([1, 2]), degs=tf.constant([2, 3]))
     assert mons.shape == [2, 3]
- 
+
 def test_eval_poly():
     ev = eval_poly(
         coef = tf.constant([2, 0, 1]),
@@ -71,9 +71,21 @@ def test_get_1D_integral_of_piecewise_poly():
 def test_poly_prod():
     @tf.function
     def square(a):
-        return array_poly_prod(a, a)
+        return poly_prod(a, a)
 
     assert np.allclose(square(tf.constant([1, 2, 3], dtype=tf.float32)), [ 1, 4, 10, 12, 9])
+
+def test_poly_prod__in_2d():
+    a = tf.ones([10, 1, 6])
+    b = tf.ones([10, 2, 1])
+    c = poly_prod(a, b, batch_ndim=1)
+    assert c.shape == [10, 2, 6]
+
+    # nontrivial value shape
+    a = tf.ones([10, 1, 6, 3])
+    b = tf.ones([10, 2, 1])
+    c = poly_prod(a, b, batch_ndim=1, var_ndim=2)
+    assert c.shape == [10, 2, 6, 3]
 
 
 if __name__ == "__main__":
@@ -85,3 +97,4 @@ if __name__ == "__main__":
     test_get_1D_Taylors_to_spline_patch_matrix()
     test_get_1D_integral_of_piecewise_poly()
     test_poly_prod()
+    test_poly_prod__in_2d()

@@ -169,9 +169,14 @@ def _tf_ravel_multi_index(multi_index, dims):
     strides = tf.math.cumprod(dims, axis=-1, reverse=True, exclusive=True)
     return tf.reduce_sum(multi_index * strides, axis=-1)
 
+def _stack_tensor_array(a, axis=0):
+    b = a.stack()
+    nd = ndim(b)
+    perm = tf.concat([tf.range(1, axis+1), [0], tf.range(axis+1, nd)], axis=0)
+    return tf.transpose(b, perm)
 
 @tf.function
-def array_poly_prod(a, b, batch_ndim=0, var_ndim=None, truncation=None, dtype=None) -> Tensor:
+def poly_prod(a, b, batch_ndim=0, var_ndim=None, truncation=None, dtype=None) -> Tensor:
     """
     Ramark:
         this function is decorated by `tf.function` to circumvent the problem described in `autograph_problem.py`.
@@ -213,12 +218,14 @@ def array_poly_prod(a, b, batch_ndim=0, var_ndim=None, truncation=None, dtype=No
     def flatten_polynomial_dimensions(x):
         s = tf.shape(x)
         ndim = tf.shape(s)[0]
+        val_ndim = ndim - batch_ndim - var_ndim
         batch_shape = s[:batch_ndim]
         degs_shape = s[batch_ndim: batch_ndim+var_ndim]
         val_shape = s[batch_ndim+var_ndim:]
         flatt_degs_shape = tf.concat([batch_shape, tf.reduce_prod(degs_shape, keepdims=True), val_shape], axis=0)
         x = tf.reshape(x, flatt_degs_shape)
-        return tf.transpose(x, perm=tf.concat([[batch_ndim], tf.range(batch_ndim), tf.range(batch_ndim + 1, ndim)], axis=0))
+        perm = tf.concat([[batch_ndim], tf.range(batch_ndim), tf.range(batch_ndim + 1, batch_ndim + 1 + val_ndim)], axis=0)
+        return tf.transpose(x, perm=perm)
 
     a_flat = flatten_polynomial_dimensions(a)
     b_flat = flatten_polynomial_dimensions(b)
@@ -239,7 +246,7 @@ def array_poly_prod(a, b, batch_ndim=0, var_ndim=None, truncation=None, dtype=No
                 c_array = c_array.write(n, c_array.read(n) + a_flat[i] * b_flat[j])
 
     c_shape = tf.concat([c_batch_shape, degs_c, val_shape], axis=0)
-    c = tf.stack(c_array.stack(), axis=batch_ndim)
+    c = _stack_tensor_array(c_array, axis=batch_ndim)
     c = tf.reshape(c, c_shape)
 
     return c

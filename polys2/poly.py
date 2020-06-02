@@ -11,7 +11,7 @@ from polys2.nptf import is_tf_object
 from . import tensor_utils as pit
 
 from .batch_utils import Batched_Object
-from .engine import (array_poly_prod, eval_poly, get_1D_Taylor_matrix, get_1d_Taylor_coef_grid, find_common_dtype)
+from .engine import (poly_prod, eval_poly, get_1D_Taylor_matrix, get_1d_Taylor_coef_grid, find_common_dtype)
 from .plot_utils import plot_fun
 
 
@@ -152,7 +152,7 @@ class Poly(Batched_Object, Val_Indexed_Object):
         return self.val_ndim == 0
     
     def __call__(self, x):
-        return eval_poly(self.coef, x, batch_ndim = self.batch_ndim, var_ndim=self.var_ndim, val_ndim=self.val_ndim )
+        return eval_poly(self.coef, x, **self._all_ndims)
     
     def cast(self, dtype):
         return Poly(coef=tf.cast(self.coef, dtype),
@@ -175,7 +175,7 @@ class Poly(Batched_Object, Val_Indexed_Object):
             # )
 
             return Poly(
-                coef = array_poly_prod(
+                coef = poly_prod(
                     self.coef, other.coef, 
                     batch_ndim = self.batch_ndim, 
                     var_ndim = self.var_ndim,
@@ -423,8 +423,8 @@ class Poly(Batched_Object, Val_Indexed_Object):
         factorial_k = 1
         for k in tf.range(2, n+1):
             factorial_k = factorial_k * k
-            b_k_coef = array_poly_prod(b_k_coef, b.coef, truncation=degs,
-                                       batch_ndim=self.batch_ndim, var_ndim=self.var_ndim)
+            b_k_coef = poly_prod(b_k_coef, b.coef, truncation=degs,
+                                 batch_ndim=self.batch_ndim, var_ndim=self.var_ndim)
             b_k_coef.set_shape(sh)
             exp_b_coef = exp_b_coef + b_k_coef / tf.cast(factorial_k, self.dtype)
         exp_b = Poly(coef=exp_b_coef, **self._all_ndims)

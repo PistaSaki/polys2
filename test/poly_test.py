@@ -1,5 +1,7 @@
 import numpy as np
 import tensorflow as tf
+from tensorflow.keras import backend as K
+from numpy import random as rnd
 from polys2.poly import Poly
 
 
@@ -29,6 +31,14 @@ def test_1d_poly():
     assert q.unit_like().coef.shape == [1]
     assert np.allclose(q.unit_like().coef, [1])
 
+def test_2d_poly():
+    f = Poly(tf.constant(rnd.randint(-3, 3, size=(10, 1, 6)), K.floatx()), batch_ndim=1)
+    g = Poly(tf.constant(rnd.randint(-3, 3, size=(10, 2, 1)), K.floatx()), batch_ndim=1)
+
+    f * g
+    assert list((f + g).degs) == [2, 6]
+    (f * g).truncate_degs(2)
+    f.truncated_exp()
 
 def test_poly_multiplication_in_graph_mode():
     @tf.function#(input_signature=[tf.TensorSpec(None, tf.float32)])
@@ -89,5 +99,6 @@ if __name__ == "__main__":
     test_poly_call_in_graph_mode()
     test_truncated_exp_in_graph_mode()
     test_1d_poly()
+    test_2d_poly()
 
 
