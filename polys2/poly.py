@@ -7,7 +7,7 @@ from scipy.special import factorial, binom
 from typing import Union, Tuple, List
 
 from polys2 import nptf
-from polys2.nptf import is_tf_object
+from polys2.nptf import is_tf_object, stack_from_array
 from . import tensor_utils as pit
 
 from .batch_utils import Batched_Object
@@ -87,56 +87,41 @@ class Poly(Batched_Object, Val_Indexed_Object):
         )
         
     @staticmethod
-    def from_tensor(a, batch_ndim = 0, var_ndim = None):
+    def from_tensor(a, batch_ndim=0, var_ndim=None):
         """Generalization of "matrix of quadratic form" -> "polynomial of order 2".
         
-        A tensor `a` with shape = [n]*deg defines 
-        a polynomial of degree `deg` (wrt. each variable) in n-dimensional space.
-        The array of coefficients of the result has shape [deg]*n.
+        A tensor `a` with `shape = [n]*deg` defines a polynomial of degree `deg` (wrt. each variable) in $R^n$.
+        The array of coefficients of the result has shape `[deg]*n`.
         """
         deg = len(a.shape) - batch_ndim
         if deg == 0:
             assert var_ndim is not None, "For a constant polynomial you must specify the number of variables."
-            return Poly(
-                coef = a[(...,) + (None,)*var_ndim],
-                batch_ndim = batch_ndim,
-                var_ndim = var_ndim
-            )
+            return Poly(coef=a[(...,) + (None,)*var_ndim], batch_ndim=batch_ndim, var_ndim=var_ndim)
         
         a_shape = a.shape
         n = a_shape[-1]
         if var_ndim is not None: 
             assert n == var_ndim
             
-        assert all([dim == n for dim in a_shape[batch_ndim:]])
-        
-        if is_tf_object(a):
-            a_np = nptf.unstack_to_array(a, start_index=batch_ndim)
-            f_np = Poly.from_tensor(a_np, batch_ndim=0)
-            ## there are some zeros among coeffs of f_np so replace by tf tensors of appropriate shape
-            batch_shape = tf.shape(a)[:batch_ndim]
-            replace_numbers_in_array(f_np.coef, tf.zeros(batch_shape, dtype = a.dtype))
-            
-            return f_np._stack_coef_to_tf(batch_ndim = batch_ndim)
+        assert all([d == n for d in a_shape[batch_ndim:]]), f"All the dims should be equal {a_shape[batch_ndim:]}, {a_shape}, {batch_ndim}."
 
-        batch_shape = a.shape[:batch_ndim]
-
-        coef = np.zeros(batch_shape + (deg +1,)* n , dtype = a.dtype)
+        coef = np.empty(shape=(deg+1, ) * n, dtype=np.object)
+        for jj in itt.product(*([range(deg+1)]*n)):
+            coef[jj] = tf.zeros(a_shape[:batch_ndim], a.dtype)
+        bs = (slice(None),) * batch_ndim
         for iii in itt.product(*([range(n)]*deg)):
-            degs = np.zeros(n, dtype = np.int)
+            degs = np.zeros(n, dtype=np.int)
             for i in iii:
                 degs[i] += 1
 
-            #print(iii, degs, a[iii])    
-            bs = (slice(None),) * batch_ndim
-            coef[bs + tuple(degs)] += a[bs + iii]
+            coef[tuple(degs)] += a[bs + iii]
 
-        return Poly(coef, var_ndim = n, batch_ndim=batch_ndim)
+        coef = stack_from_array(coef, start_index=batch_ndim)
+        return Poly(coef, var_ndim=n, batch_ndim=batch_ndim)
 
     def unit_like(self) -> "Poly":
         """Return a polynomial representing 1 with the same `batch_ndim`, `var_ndim` and `dtype`."""
-        return Poly.constant(tf.constant(1, dtype=self.dtype),
-                             batch_ndim=self.batch_ndim, val_ndim=self.val_ndim, var_ndim=self.var_ndim)
+        return Poly.constant(tf.constant(1, dtype=self.dtype), **self._all_ndims)
 
     def __repr__(self):
         s = "Poly( " + str(self.coef) 
@@ -155,8 +140,7 @@ class Poly(Batched_Object, Val_Indexed_Object):
         return eval_poly(self.coef, tf.cast(x, self.dtype), **self._all_ndims)
     
     def cast(self, dtype):
-        return Poly(coef=tf.cast(self.coef, dtype),
-                    batch_ndim=self.batch_ndim, var_ndim=self.var_ndim, val_ndim=self.val_ndim)
+        return Poly(coef=tf.cast(self.coef, dtype), **self._all_ndims)
 
     @property
     def dtype(self):
@@ -580,13 +564,5 @@ class Poly(Batched_Object, Val_Indexed_Object):
     @staticmethod
     def constant(c, batch_ndim, var_ndim, val_ndim, ):
         tf.assert_equal(ndim(c), 0, "Maybe this method does not do what you want.")
-        
-        c = tf.reshape(c, [1]* (batch_ndim + var_ndim + val_ndim))
-        return Poly(
-            coef = c, 
-            batch_ndim = batch_ndim, 
-            var_ndim = var_ndim, 
-            val_ndim = val_ndim 
-        )
-        
-        
+        c = tf.reshape(c, [1] * (batch_ndim + var_ndim + val_ndim))
+        return Poly(coef=c, batch_ndim=batch_ndim, var_ndim=var_ndim, val_ndim=val_ndim)

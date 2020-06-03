@@ -7,6 +7,8 @@ The only exceptions are:
     logist
     log_odds
 """
+from numbers import Number
+
 import numpy as np
 import tensorflow as tf
 import numpy.linalg as la
@@ -454,48 +456,11 @@ def stack_from_array(a, start_index=None, val_shape=None, dtype=None):
         except ValueError as exc:
             raise ValueError("val_shape can not be inferred.") from exc
 
-    else:
-        if any([isinstance(x, Number) for x in a_flat]):
-            # we replace by numerical zeros by tensors so that we can stack
-            assert dtype is not None, (
-                    "If you want to automatically replace numbers, " +
-                    "please provide a dtype."
-            )
-            zeros = tf.zeros(shape=val_shape, dtype=dtype)
-            a_flat = [
-                x if not isinstance(x, Number) else x + zeros
-                for x in a_flat
-            ]
-
     if start_index is None:
         start_index = 0
-    #    if start_index < 0:
-    #        start_index = val_ndim + start_index
-
-    #    val_ndim = len(val_shape)
-    #    assert 0 <= start_index <= val_ndim, (
-    #        "Problem: start_index = {};  val_ndim = {}.".format(start_index, val_ndim)
-    #    )
-
-    #    if start_index is None:
-    #        start_index = a.ndim
-    #    if start_index < 0:
-    #        start_index = a.ndim + start_index
-    #    assert 0 <= start_index <= a.ndim, (
-    #        "Problem: start_index = {};  a.ndim = {}.".format(start_index, a.ndim)
-    #    )
-
-    res = tf.stack(a_flat, axis=start_index)
-    res = tf.reshape(res,
-                     shape=tf.concat(
-                         values=[
-                             val_shape[:start_index],
-                             a.shape,
-                             val_shape[start_index:]
-                         ],
-                         axis=0
-                     )
-                     )
+    res_flat = tf.stack(a_flat, axis=start_index)
+    res_shape = tf.concat([val_shape[:start_index], a.shape, val_shape[start_index:]], axis=0)
+    res = tf.reshape(res_flat, res_shape)
     return res
 
 
