@@ -6,7 +6,6 @@ from polys2.engine import (get_monomials, eval_poly, get_1D_Taylor_matrix, get_1
 
 
 def test_get_monomials():
-    
     mons = get_monomials(
         x = tf.constant([
                 [1, 0],
@@ -32,48 +31,38 @@ def test_get_monomials():
     mons = gm(x=tf.constant([1, 2]), degs=tf.constant([2, 3]))
     assert mons.shape == [2, 3]
 
+
 def test_eval_poly():
-    ev = eval_poly(
-        coef = tf.constant([2, 0, 1]),
-        x = tf.constant([3])
-    )
+    ev = eval_poly(coef=tf.constant([2, 0, 1]), x=tf.constant([3]))
     assert np.allclose(ev, 11)
-    
+
+
 def test_get_1D_Taylor_matrix():
-    M = get_1D_Taylor_matrix( a = 2, deg = 4, trunc = 2)
-    assert np.allclose( M,
-        [[ 1.,  2.,  4.,  8.],
-         [ 0.,  1.,  4., 12.]]
-    )
-    
+    M = get_1D_Taylor_matrix(a=2., deg=4, trunc=2)
+    assert np.allclose(M, [[1., 2., 4., 8.],
+                           [0., 1., 4., 12.]])
+
+
 def test_get_1d_Taylor_coef_grid():
-    get_1d_Taylor_coef_grid(
-        coef = np.eye(2),
-        poly_index = 1,
-        new_index = 1, 
-        control_times=[0, 1, 2]
-    )
-    
+    get_1d_Taylor_coef_grid(coef=tf.eye(2), poly_index=1, new_index=1, control_times=tf.constant([0, 1, 2], tf.float32))
+
+
 def test_get_1D_Taylors_to_spline_patch_matrix():
     get_1D_Taylors_to_spline_patch_matrix(0, 1, 2)
 
+
 def test_get_1D_integral_of_piecewise_poly():
-    get_1D_integral_of_piecewise_poly(
-        coef = np.array([
-            [0, 1, 0],
-            [1, 0, 0],
-        ]),
-        bin_axis = 0,
-        polynom_axis = 1,
-        control_times = [-1, 0, 1]
-    )
+    get_1D_integral_of_piecewise_poly(coef=np.array([[0, 1, 0], [1, 0, 0]]), bin_axis=0, polynom_axis=1,
+                                      control_times=tf.constant([-1, 0, 1], tf.float32))
+
 
 def test_poly_prod():
     @tf.function
     def square(a):
         return poly_prod(a, a)
 
-    assert np.allclose(square(tf.constant([1, 2, 3], dtype=tf.float32)), [ 1, 4, 10, 12, 9])
+    assert np.allclose(square(tf.constant([1, 2, 3], dtype=tf.float32)), [1, 4, 10, 12, 9])
+
 
 def test_poly_prod__in_2d():
     a = tf.ones([10, 1, 6])

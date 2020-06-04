@@ -1,6 +1,7 @@
 import itertools as itt
 
 import numpy as np
+import tensorflow as tf
 
 from polys2 import nptf
 from .batch_utils import Batched_Object
@@ -21,12 +22,11 @@ class TaylorGrid(Batched_Object, Val_Indexed_Object):
         
         assert len(self.coef.shape) == self.batch_ndim + 2 * self.var_ndim + self.val_ndim
         
-        grid_shape_from_coef = list(self.coef.shape[self.batch_ndim: self.batch_ndim + self.var_ndim])
-        grid_shape_from_params = list(self.grid_shape)
-        assert grid_shape_from_coef == grid_shape_from_params, (
-            "The coeficients suggest grid shape " + str(grid_shape_from_coef) +
-            " while the one inferred from params is " + str(grid_shape_from_params)
-        )
+        grid_shape_from_coef = tf.shape(self.coef)[self.batch_ndim: self.batch_ndim + self.var_ndim]
+        grid_shape_from_params = tf.convert_to_tensor(self.grid_shape)
+        tf.assert_equal(grid_shape_from_coef, grid_shape_from_params, (
+            f"The coefficients suggest grid shape {grid_shape_from_coef}"
+            f" while the one inferred from params is {grid_shape_from_params}."))
     
     def __repr__(self):
         s = "TaylorGrid( " 
@@ -89,7 +89,7 @@ class TaylorGrid(Batched_Object, Val_Indexed_Object):
     
     @property
     def grid_shape(self):
-        return [len(par) for par in self.params]
+        return [tf.shape(par)[0] for par in self.params]
     
     @property
     def bins_shape(self):
@@ -151,9 +151,7 @@ class TaylorGrid(Batched_Object, Val_Indexed_Object):
         """
         f = self.to_Poly()
         return f.val_sum(axis).to_TaylorGrid(self.params)
-        
-        
-    
+
     def to_Poly(self):
         return Poly(
             coef = self.coef, 
@@ -171,7 +169,6 @@ class TaylorGrid(Batched_Object, Val_Indexed_Object):
     
     def grid_indices(self):
         return itt.product(*[range(len(par)) for par in self.params])
-    
     
     def plot(self, **kwargs):
         for ii in self.grid_indices():

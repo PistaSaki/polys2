@@ -80,50 +80,52 @@ def eval_poly(coef, x, batch_ndim = None, var_ndim = None, val_ndim = None, ):
     )
 
 
-def get_1D_Taylor_matrix(a, deg, trunc = None):
+def get_1D_Taylor_matrix(a, deg, trunc=None):
     """ Return matrix with shape `[trunc, deg]` af Taylor map at `a`.
     
-    Taking (truncated) Taylor expansion at $a\in R$ defines a linear map $R[x] \to R[x]$.
+    Taking (truncated) Taylor expansion at $a in R$ defines a linear map $R[x] / (x^deg)$ to $R[x] / (x^trunc)$.
     We return the matrix of this map.
     Our convention will be: $ deg(a_0 + a_1 x + ... + a_{n-1} x^{n-1}) = n $.
+
+    Args:
+        a: scalar or batch of scalars
+        deg: degree of input polynomial
+        trunc: degree of Taylor expansion
+
+    Returns:
+        tensor of shape `a.shape + [trunc, deg]`
     """
-    M = np.array([
-        [binom(n, k) * a**(n-k) for k in range(n + 1)] + [0]*(deg - n - 1)
+    a = tf.convert_to_tensor(a, dtype_hint=K.floatx())
+    zero = tf.zeros_like(a)
+    M = tf.stack([
+        tf.stack([binom(n, k) * a**(n-k) for k in range(n + 1)] + [zero]*(deg - n - 1), axis=-1)
         for n in range(deg)
-    ]).T
+    ], axis=-1)
     
     if trunc is not None:
-        M = M[:trunc]
+        M = M[..., :trunc, :]
         
     return M
 
-#%%
 
-def get_1d_Taylor_coef_grid(coef, poly_index, new_index, control_times, trunc = None):
+def get_1d_Taylor_coef_grid(coef, poly_index, new_index, control_times, trunc=None):
     """
     Returns a tensor with one new index of length = len(control_times)
     """
-    A = np.array([
-        get_1D_Taylor_matrix(a, deg = coef.shape[poly_index], trunc = trunc).T
-        for a in control_times        
-    ], dtype = nptf.np_dtype(coef))
-    
+    A = get_1D_Taylor_matrix(control_times, deg=coef.shape[poly_index], trunc=trunc)
+
     if poly_index >= new_index:
         poly_index += 1
-        
 
     taylors = pit.right_apply_map_along_batch(
-        X = tf.expand_dims(coef, new_index),
-        A = A,
-        batch_inds = [new_index],
-        contract_inds = [poly_index],
-        added_inds = [poly_index]
+        X=tf.expand_dims(coef, new_index),
+        A=tf.linalg.matrix_transpose(A),
+        batch_inds=[new_index],
+        contract_inds=[poly_index],
+        added_inds=[poly_index]
     )
     return taylors
 
-
-
-#%%
 
 def get_1D_Taylors_to_spline_patch_matrix(a, b, deg):
     """

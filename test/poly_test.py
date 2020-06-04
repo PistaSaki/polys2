@@ -118,21 +118,48 @@ def test_from_tensor():
     assert np.allclose(fun1(a[None, :, :], batch_ndim=1), expected_res[None, :, :])
 
 
-def test_from_tensor_in_graph_mode():
-    a = tf.constant([[1, 2],
-                     [3, 4]], dtype=tf.float32)
-    p = Poly.from_tensor(a)
-    assert np.allclose(p.coef, [[0, 0, 4],
-                                [0, 5, 0],
-                                [1, 0, 0]])
+def test_get_taylor_grid():
+    def fun(poly_coef):
+        p = Poly(poly_coef)
+        tg = p.get_taylor_grid(params=[tf.constant([0, 1, 2], dtype=tf.float32)], truncs=2)
+        return tg.coef
+
+    poly_coef = tf.constant([0., 1, 2, 3, 4], tf.float32)
+    expected_tg_coef = [[0, 1], [10, 30], [98, 173]]
+
+    assert np.allclose(fun(poly_coef), expected_tg_coef)
+
+    # try in graph-mode
+    fun1 = tf.function(fun)
+    assert np.allclose(fun1(poly_coef), expected_tg_coef)
+
+
+def test_get_taylor_grid_2d():
+    def fun(poly_coef):
+        p = Poly(poly_coef)
+        tg = p.get_taylor_grid(params=[tf.constant([0, 1, 2], dtype=tf.float32),
+                                       tf.constant([0, 1], dtype=tf.float32)],
+                               truncs=2)
+        return tg.coef
+
+    poly_coef = tf.constant([[0., 1], [2, 3]], tf.float32)
+
+    assert fun(poly_coef).shape == [3, 2, 2, 2]
+
+    # try in graph-mode
+    fun1 = tf.function(fun)
+    assert fun1(poly_coef).shape == [3, 2, 2, 2]
 
 
 if __name__ == "__main__":
-    # test_poly_multiplication_in_graph_mode()
-    # test_poly_addition_in_graph_mode()
-    # test_poly_call_in_graph_mode()
-    # test_truncated_exp_in_graph_mode()
-    # test_1d_poly()
-    # test_2d_poly()
+    test_poly_multiplication_in_graph_mode()
+    test_poly_addition_in_graph_mode()
+    test_poly_call_in_graph_mode()
+    test_truncated_exp_in_graph_mode()
+    test_1d_poly()
+    test_2d_poly()
     test_from_tensor()
+    test_get_taylor_grid()
+    test_get_taylor_grid_2d()
+
     print("Passed!")

@@ -1,5 +1,6 @@
 import numpy as np
 import tensorflow as tf
+from tensorflow import Tensor
 from tensorflow.keras.backend import ndim
 import numbers
 import itertools as itt
@@ -477,32 +478,25 @@ class Poly(Batched_Object, Val_Indexed_Object):
             degs = degs
         )
 
-    def get_Taylor_grid(self, params, truncs = None):
+    def get_taylor_grid(self, params: List[Tensor], truncs: Union[int, Tuple[int]] = None) -> "TaylorGrid":
         from .taylor_grid import TaylorGrid
 
         assert len(params) == self.var_ndim
-        assert issubclass( nptf.np_dtype(self.coef).type, np.floating), (
-            "Polynomial should have coef of floating dtype. "
-            "At the moment dtype = {}.".format(nptf.np_dtype(self.coef))
-        )
-        
+
         if truncs is None:
             truncs = self.degs
-        if isinstance(truncs, numbers.Number):
-            truncs = [truncs]*len(params)
-            
-            
+        truncs = truncs * np.ones(len(params), dtype=np.int32)
+
         taylors = self.coef
         for i, (par, trunc) in enumerate(zip(params, truncs)):
             taylors = get_1d_Taylor_coef_grid(
-                coef = taylors, 
-                poly_index = self.batch_ndim + 2 * i, 
-                new_index = self.batch_ndim + i, 
-                control_times = par, 
-                trunc = trunc
+                coef=taylors,
+                poly_index=self.batch_ndim + 2 * i,
+                new_index=self.batch_ndim + i,
+                control_times=par,
+                trunc=trunc
             )
-            
-        
+
         return TaylorGrid(
             coef=taylors, params = params, 
             batch_ndim=self.batch_ndim, val_ndim=self.val_ndim
@@ -512,23 +506,15 @@ class Poly(Batched_Object, Val_Indexed_Object):
         from .poly_mesh import PolyMesh
 
         assert len(params) <= self.batch_ndim
-        return PolyMesh(
-            coef = self.coef, 
-            params = params, 
-            batch_ndim=self.batch_ndim - len(params), 
-            val_ndim=self.val_ndim
-        )
+        return PolyMesh(coef=self.coef, params=params,
+                        batch_ndim=self.batch_ndim - len(params), val_ndim=self.val_ndim)
 
     def to_TaylorGrid(self, params):
         from .taylor_grid import TaylorGrid
 
         assert len(params) <= self.batch_ndim
-        return TaylorGrid(
-            coef = self.coef, 
-            params = params, 
-            batch_ndim=self.batch_ndim - len(params), 
-            val_ndim=self.val_ndim
-        )
+        return TaylorGrid(coef = self.coef, params = params,
+                          batch_ndim=self.batch_ndim - len(params), val_ndim=self.val_ndim)
         
     def der(self, k = None):
         """Derivative w.r.t. $x_k$."""
