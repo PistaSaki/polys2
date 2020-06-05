@@ -151,6 +151,16 @@ def test_get_taylor_grid_2d():
     assert fun1(poly_coef).shape == [3, 2, 2, 2]
 
 
+def test_taylor_at():
+    def fun(coef, point):
+        p = Poly(coef)
+        return p.taylor_at(point).coef
+
+    c = tf.constant([1, 2, 3], tf.float32)
+    a = tf.constant([2], tf.float32)
+    assert np.allclose(fun(c, a), [17, 14, 3])
+
+
 if __name__ == "__main__":
     test_poly_multiplication_in_graph_mode()
     test_poly_addition_in_graph_mode()
@@ -161,5 +171,6 @@ if __name__ == "__main__":
     test_from_tensor()
     test_get_taylor_grid()
     test_get_taylor_grid_2d()
+    test_taylor_at()
 
     print("Passed!")

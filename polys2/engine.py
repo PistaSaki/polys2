@@ -97,10 +97,9 @@ def get_1D_Taylor_matrix(a, deg, trunc=None):
     """
     a = tf.convert_to_tensor(a, dtype_hint=K.floatx())
     zero = tf.zeros_like(a)
-    M = tf.stack([
-        tf.stack([binom(n, k) * a**(n-k) for k in range(n + 1)] + [zero]*(deg - n - 1), axis=-1)
-        for n in range(deg)
-    ], axis=-1)
+    columns = [tf.stack([binom(n, k) * a**(n-k) for k in range(n + 1)] + [zero for _ in range (deg - n - 1)], axis=-1)
+               for n in range(deg)]
+    M = tf.stack(columns, axis=-1)
     
     if trunc is not None:
         M = M[..., :trunc, :]

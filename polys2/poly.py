@@ -1,6 +1,7 @@
 import numpy as np
 import tensorflow as tf
 from tensorflow import Tensor
+from tensorflow.keras import backend as K
 from tensorflow.keras.backend import ndim
 import numbers
 import itertools as itt
@@ -316,32 +317,23 @@ class Poly(Batched_Object, Val_Indexed_Object):
         end = [1] * f.var_ndim if end is None else end
         plot_fun(f, start, end, **kwargs)
         
-    def Taylor_at(self, a):
-        assert a.shape[-1] == self.var_ndim 
-        if nptf.ndim(a) == 1:
+    def taylor_at(self, a):
+        """Return taylor expansion at `a`."""
+        assert a.shape[-1] == self.var_ndim
+        if ndim(a) == 1:
             taylor_coef = pit.apply_tensor_product_of_maps(
-                matrices = [
-                    get_1D_Taylor_matrix(ai, deg = self.degs[i])
-                    for i, ai in enumerate(a)
-                ],
-                x = self.coef,
-                start_index = self.batch_ndim
+                matrices=[get_1D_Taylor_matrix(ai, deg=self.degs[i]) for i, ai in enumerate(a)],
+                x=self.coef,
+                start_index=self.batch_ndim
             )
-            return Poly(
-                coef = taylor_coef, 
-                batch_ndim = self.batch_ndim, 
-                var_ndim = self.var_ndim, 
-                val_ndim = self.val_ndim
-            )
+            return Poly(coef=taylor_coef, **self._all_ndims)
         else:
-            #assert nptf.ndim(a) - 1 = self.batch_ndim
-            #for i in range(self.var_ndim):
-            #    get_1D_Taylor_matrix(a[..., i], deg = self.degs[i])
-            
             raise NotImplementedError()
     
     def shift(self, shift):
-        return self.Taylor_at(-np.array(shift))
+        """Return polynomial shifted by `shift`."""
+        shift = tf.convert_to_tensor(shift, dtype_hint=K.floatx())
+        return self.taylor_at(-shift)
     
     def _get_batch(self, selector):
         coef = self.coef[selector]
