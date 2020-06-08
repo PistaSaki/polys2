@@ -73,7 +73,7 @@ class Poly(Batched_Object, Val_Indexed_Object):
         self.val_ndim = val_ndim
         
         try:
-            self.degs = tf.shape(coef)[batch_ndim: batch_ndim + var_ndim]
+            self.degs = tuple(int(d) for d in coef.shape[batch_ndim: batch_ndim + var_ndim])
         except TypeError as err:
             raise Exception(
                 err, 
@@ -322,7 +322,7 @@ class Poly(Batched_Object, Val_Indexed_Object):
         assert a.shape[-1] == self.var_ndim
         if ndim(a) == 1:
             taylor_coef = pit.apply_tensor_product_of_maps(
-                matrices=[get_1D_Taylor_matrix(ai, deg=self.degs[i]) for i, ai in enumerate(a)],
+                matrices=[get_1D_Taylor_matrix(a[..., i], deg=self.degs[i]) for i in range(a.shape[-1])],
                 x=self.coef,
                 start_index=self.batch_ndim
             )

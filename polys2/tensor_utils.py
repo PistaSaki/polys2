@@ -109,7 +109,7 @@ def apply_tensor_product_of_maps(matrices, x, start_index = 0):
     """
     n = len(matrices)
     for M in reversed(matrices):
-        x = np.tensordot(M, x, axes = [[1], [start_index + n-1]])
+        x = tf.tensordot(M, x, axes = [[1], [start_index + n-1]])
     return x
 
 def flatten_left(values, ndims=None):

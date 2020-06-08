@@ -80,7 +80,7 @@ def eval_poly(coef, x, batch_ndim = None, var_ndim = None, val_ndim = None, ):
     )
 
 
-def get_1D_Taylor_matrix(a, deg, trunc=None):
+def get_1D_Taylor_matrix(a, deg:int, trunc:int=None):
     """ Return matrix with shape `[trunc, deg]` af Taylor map at `a`.
     
     Taking (truncated) Taylor expansion at $a in R$ defines a linear map $R[x] / (x^deg)$ to $R[x] / (x^trunc)$.
@@ -96,8 +96,9 @@ def get_1D_Taylor_matrix(a, deg, trunc=None):
         tensor of shape `a.shape + [trunc, deg]`
     """
     a = tf.convert_to_tensor(a, dtype_hint=K.floatx())
+    deg = int(deg)
     zero = tf.zeros_like(a)
-    columns = [tf.stack([binom(n, k) * a**(n-k) for k in range(n + 1)] + [zero for _ in range (deg - n - 1)], axis=-1)
+    columns = [tf.stack([binom(n, k) * a**(n-k) for k in range(n + 1)] + [zero for _ in range(deg - n - 1)], axis=-1)
                for n in range(deg)]
     M = tf.stack(columns, axis=-1)
     
@@ -354,6 +355,7 @@ def get_1D_integral_of_piecewise_poly(
         polys_are_in_bin_coords = True
     ):
     deg = int(coef.shape[polynom_axis])
+
     def integration_functional(a, b, deg):
         n = np.arange(deg)
         if polys_are_in_bin_coords:  
@@ -384,7 +386,7 @@ def get_integral_of_spline_from_taylors_1D(
     where n is the number of dimensions, which is not too much.
     """
     par = control_times
-    taylor_grid = taylor_grid_coeffs
+    taylor_grid = tf.convert_to_tensor(taylor_grid_coeffs, dtype_hint=K.floatx())
     
     # in the first step we put into polynom_axis the taylor_polynomials of the two consecutive bins
     start_selector = [slice(None)] * len(taylor_grid.shape)
@@ -403,12 +405,12 @@ def get_integral_of_spline_from_taylors_1D(
         axis = polynom_axis
     )
     
-    dtype = tf.np_dtype(taylor_grid_coeffs)
+    dtype = taylor_grid.dtype.as_numpy_dtype()
     deg = int(taylor_grid.shape[polynom_axis])
-    ## reparametrization matrices for expressing the taylors in bin-scaled 
-    ## Note that we have already stuck the two taylors together along the polynom-axis
-    ## so our diagonal reparametrization matrices have the diagonal repeated twice
-    ## ( thus the resulting matrix has dimension 2 * deg)
+    # reparametrization matrices for expressing the taylors in bin-scaled
+    # Note that we have already stuck the two taylors together along the polynom-axis
+    # so our diagonal reparametrization matrices have the diagonal repeated twice
+    # ( thus the resulting matrix has dimension 2 * deg)
     RM = np.array(
         [
             np.diag([ (b- a)**k for k in range(deg) ] * 2)
@@ -417,20 +419,13 @@ def get_integral_of_spline_from_taylors_1D(
         dtype = dtype
     )
     
-    ## now apply in each bin the corresponding "spline trasformation" i.e inverse of taking taylors 
+    # now apply in each bin the corresponding "spline transformation" i.e inverse of taking taylors
     SM = np.array(
-        [
-            get_1D_Taylors_to_spline_patch_matrix(
-                    0, 1, deg = deg
-                ).T
-            for a, b in zip(par[:-1], par[1:])
-        ],
+        [get_1D_Taylors_to_spline_patch_matrix(0, 1, deg = deg).T for a, b in zip(par[:-1], par[1:])],
         dtype = dtype
     )
-            
-    
 
-    ## finally we need to integrate 
+    # finally we need to integrate
     def integration_functional(a, b, deg):
         n = np.arange(deg)
         if polys_are_in_bin_coords:  
@@ -443,16 +438,9 @@ def get_integral_of_spline_from_taylors_1D(
             for a, b in zip(control_times[:-1], control_times[1:])
         ], dtype = dtype)
     
-    
-    ## we multiply all the transformations 
-    ## (we must make IM that is a batch of functionals into matrices)
+    # we multiply all the transformations (we must make IM that is a batch of functionals into matrices)
     A = (RM @ SM @ IM[..., None])[..., 0]
     
     # the following could be done with tensordot:
-    return pit.right_apply_map_along_batch(
-        X = stacked_taylors, A = A, 
-        batch_inds = [], contract_inds = [bin_axis, polynom_axis], added_inds = []
-    ) 
-    
-
-
+    return pit.right_apply_map_along_batch(X=stacked_taylors, A=A, batch_inds=[],
+                                           contract_inds=[bin_axis, polynom_axis], added_inds=[])
