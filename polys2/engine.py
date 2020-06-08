@@ -131,13 +131,13 @@ def get_1D_Taylors_to_spline_patch_matrix(a, b, deg):
     """
     `deg` is the degree of the Taylors. Thus the degree of the spline is 2 * deg.
     """
-    Taylors_matrix = np.concatenate([
+    Taylors_matrix = tf.concat([
             get_1D_Taylor_matrix(a, deg = 2 * deg, trunc = deg),
             get_1D_Taylor_matrix(b, deg = 2 * deg, trunc = deg),
-        ])
+        ], axis=-2)
     
     #print(Taylors_matrix)
-    return la.inv(Taylors_matrix)
+    return tf.linalg.inv(Taylors_matrix)
                         
 
 def get_Catmul_Rom_Taylors_1D(coef, control_index, control_times, added_index):
@@ -375,9 +375,8 @@ def get_1D_integral_of_piecewise_poly(
     ) 
     
     
-def get_integral_of_spline_from_taylors_1D(
+def get_integral_of_spline_from_taylors_1d(
         taylor_grid_coeffs, bin_axis, polynom_axis, control_times,
-        polys_are_in_bin_coords = True
     ):
     """
     This is basically a composition of 
@@ -396,48 +395,31 @@ def get_integral_of_spline_from_taylors_1D(
     end_selector = [slice(None)] * len(taylor_grid.shape)
     end_selector[bin_axis] = slice(1, None)
     end_selector = tuple(end_selector)
-    
-    stacked_taylors = tf.concat(
-        [
-            taylor_grid[start_selector], 
-            taylor_grid[end_selector],
-        ],
-        axis = polynom_axis
-    )
-    
-    dtype = taylor_grid.dtype.as_numpy_dtype()
-    deg = int(taylor_grid.shape[polynom_axis])
-    # reparametrization matrices for expressing the taylors in bin-scaled
-    # Note that we have already stuck the two taylors together along the polynom-axis
+
+    stacked_taylors = tf.concat([taylor_grid[start_selector], taylor_grid[end_selector]], axis=polynom_axis)
+
+    n_bins = tf.shape(stacked_taylors)[bin_axis]
+    deg = int(taylor_grid.shape[polynom_axis])  # `deg` is degree of input taylor-grid. Degree of spline is `2*deg`.
+
+    # reparametrization matrices for expressing the taylors in bin-scaled coordinates
+    # Note that we have already concatenated the two taylors together along the polynom-axis
     # so our diagonal reparametrization matrices have the diagonal repeated twice
     # ( thus the resulting matrix has dimension 2 * deg)
-    RM = np.array(
-        [
-            np.diag([ (b- a)**k for k in range(deg) ] * 2)
-            for a, b in zip(par[:-1], par[1:])
-        ],
-        dtype = dtype
-    )
-    
+    # RM.shape = [n_bins, 2*deg, 2*deg]
+    RM = tf.linalg.diag(tf.stack([(par[1:] - par[:-1])**k for k in range(deg)] * 2, axis=1))
+    tf.assert_equal(tf.shape(RM), [n_bins, 2*deg, 2*deg])
+
     # now apply in each bin the corresponding "spline transformation" i.e inverse of taking taylors
-    SM = np.array(
-        [get_1D_Taylors_to_spline_patch_matrix(0, 1, deg = deg).T for a, b in zip(par[:-1], par[1:])],
-        dtype = dtype
-    )
+    SM = tf.repeat(input=tf.transpose(get_1D_Taylors_to_spline_patch_matrix(0, 1, deg=deg))[None, :, :],
+                   repeats=n_bins, axis=0)
+    tf.assert_equal(tf.shape(SM), [n_bins, 2*deg, 2*deg])
 
     # finally we need to integrate
-    def integration_functional(a, b, deg):
-        n = np.arange(deg)
-        if polys_are_in_bin_coords:  
-            return 1/(n + 1) * (b - a)#**(n+1)
-        else:
-            return 1/(n + 1) * (b**(n+1) - a**(n+1))
-    
-    IM = np.array([
-            integration_functional(a, b, 2 * deg)
-            for a, b in zip(control_times[:-1], control_times[1:])
-        ], dtype = dtype)
-    
+    # `IM.shape == [n_bins, deg]`
+    n = tf.range(2*deg, dtype=par.dtype)
+    IM = 1/(n+1) * (par[1:] - par[:-1])[:, None]
+    tf.assert_equal(tf.shape(IM), [n_bins, 2*deg])
+
     # we multiply all the transformations (we must make IM that is a batch of functionals into matrices)
     A = (RM @ SM @ IM[..., None])[..., 0]
     

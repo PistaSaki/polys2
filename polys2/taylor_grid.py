@@ -6,7 +6,7 @@ from tensorflow.keras.backend import ndim
 
 from polys2 import nptf
 from .batch_utils import Batched_Object
-from .engine import (get_integral_of_spline_from_taylors_1D,
+from .engine import (get_integral_of_spline_from_taylors_1d,
                      get_spline_from_taylors_1D,
                      get_Catmul_Rom_Taylors_1D,
                      )
@@ -203,7 +203,7 @@ class TaylorGrid(Batched_Object, Val_Indexed_Object):
     def integrate_spline(self):
         coef = self.coef
         for i in range(self.var_ndim):
-            coef = get_integral_of_spline_from_taylors_1D(taylor_grid_coeffs=coef, bin_axis=self.batch_ndim,
+            coef = get_integral_of_spline_from_taylors_1d(taylor_grid_coeffs=coef, bin_axis=self.batch_ndim,
                                                           polynom_axis=self.batch_ndim + self.var_ndim - i,
                                                           control_times=self.params[i])
         return coef
