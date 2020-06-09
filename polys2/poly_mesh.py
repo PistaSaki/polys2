@@ -3,11 +3,12 @@ import numbers
 
 import numpy as np
 import tensorflow as tf
+from tensorflow.keras.backend import ndim
 from matplotlib import pyplot as pl
 
 from polys2 import nptf
 from .batch_utils import Batched_Object
-from .engine import (get_1D_integral_of_piecewise_poly)
+from .engine import (get_1d_integral_of_piecewise_poly)
 from .plot_utils import plot_fun
 from .poly import Poly, get_bin_indices
 
@@ -28,23 +29,22 @@ def ipow(base, exponent):
 
         
 class PolyMesh(Batched_Object):
-    
-    def __init__(self, coef, params, batch_ndim = 0,  val_ndim = 0):
-        
+
+    def __init__(self, coef, params, batch_ndim=0, val_ndim=0):
         self.coef = coef
         self.batch_ndim = batch_ndim
-        self.params = [np.array(cc, dtype = nptf.np_dtype(coef)) for cc in params ]
+        self.params = [tf.cast(c, coef.dtype) for c in params]
         self.val_ndim = val_ndim
         
-        message = (
-            f"coef.shape={self.coef.shape}, batch_ndim={batch_ndim}, "
-            f"var_ndim = {self.var_ndim}, val_ndim = {self.val_ndim}, "
-            f"bins_shape = {self.bins_shape}"
-        )
-        assert len(self.coef.shape) == self.batch_ndim + 2 * self.var_ndim + self.val_ndim, message
-        assert list(self.coef.shape[self.batch_ndim: self.batch_ndim + self.var_ndim]) == list(self.bins_shape), message
-    
-        
+        message = (f"coef.shape={self.coef.shape}, batch_ndim={batch_ndim}, "
+                   f"var_ndim = {self.var_ndim}, val_ndim = {self.val_ndim}, "
+                   f"bins_shape = {self.bins_shape}")
+        tf.assert_equal(tf.rank(self.coef), self.batch_ndim + 2 * self.var_ndim + self.val_ndim, message)
+
+        bins_shape_from_coef = tf.shape(self.coef)[self.batch_ndim: self.batch_ndim + self.var_ndim]
+        bins_shape_from_params = self.bins_shape
+        tf.assert_equal(bins_shape_from_coef, bins_shape_from_params, message)
+
     def __repr__(self):
         s = "Polymesh( " 
         s += "var_ndim = " + str(self.var_ndim)
@@ -53,15 +53,11 @@ class PolyMesh(Batched_Object):
             s += ", batch_ndim = " + str(self.batch_ndim)
         if self.val_ndim > 0:
             s += ", val_ndim = " + str(self.val_ndim)
-        s += ", coef.shape = " + str(self.coef.shape) 
-        
+        s += ", coef.shape = " + str(self.coef.shape)
         s += " )"
-            
-        
         return s
         
     def __mul__(self, other):
-            
         f = self.to_Poly()
         g = other.to_Poly() if isinstance(other, PolyMesh) else other
         return (f * g).to_PolyMesh(self.params)
@@ -87,14 +83,12 @@ class PolyMesh(Batched_Object):
         return 1/other * self
         
     def __pow__(self, exponent):
-        n = exponent
-        assert isinstance(n, numbers.Integral)
-        assert n > 0
+        assert isinstance(exponent, numbers.Integral)
+        exponent = int(exponent)
+        assert exponent > 0
         return ipow(self, exponent)
-        
-        
-    
-    def der(self, k = None):
+
+    def der(self, k: int = None):
         """Derivative w.r.t. $x_k$.$"""
         
         if k is None:
@@ -105,16 +99,15 @@ class PolyMesh(Batched_Object):
         
         df = self.to_Poly().der(k).to_PolyMesh(self.params)
         
-        ## since the parametrization is different in each bin, we must rescale
-        bin_index = self.batch_ndim + k
+        # since the parametrization is different in each bin, we must rescale
         scale = self.params[k][1:] - self.params[k][:-1]
         
-        sh = [1] * nptf.ndim(self.coef)
-        sh[bin_index] = -1
-        scale = scale.reshape(sh)
+        sh = [1] * ndim(self.coef)
+        sh[self.batch_ndim + k] = -1
+        scale = tf.reshape(scale, sh)
         
         df.coef = df.coef / scale
-        
+
         return df
         
     def _get_batch(self, selector):
@@ -146,11 +139,11 @@ class PolyMesh(Batched_Object):
     
     @property
     def grid_shape(self):
-        return [len(par) for par in self.params]
+        return [tf.shape(par)[0] for par in self.params]
     
     @property
     def bins_shape(self):
-        return [len(par) - 1 for par in self.params]
+        return [d - 1 for d in self.grid_shape]
     
     
     def __call__(self, x):
@@ -282,7 +275,7 @@ class PolyMesh(Batched_Object):
     def integrate(self):
         coef = self.coef
         for i in range(self.var_ndim):
-            coef = get_1D_integral_of_piecewise_poly(
+            coef = get_1d_integral_of_piecewise_poly(
                 coef = coef, 
                 bin_axis = self.batch_ndim, 
                 polynom_axis = self.batch_ndim + self.var_ndim - i , 

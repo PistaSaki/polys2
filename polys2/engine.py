@@ -27,21 +27,22 @@ def get_monomials(x, degs):
         `x =  [x1, x2, ... xn]` and `[a1, ... an] < degs` then
         `mon[a1, ...an] = x1**a1 * ... xn**an`.
     """
+
     def monomials_1var(x, deg):
         return x[..., None] ** tf.range(deg, dtype=x.dtype)
-    
+
     assert x.shape[-1] == len(degs)
-    
+
     ret = 1
     for i in range(x.shape[-1]):
         xi = x[..., i]
         deg = degs[i]
         pows_xi = monomials_1var(xi, deg)
-        selector = [None]*len(degs)
+        selector = [None] * len(degs)
         selector[i] = slice(None)
         selector = [Ellipsis] + selector
         ret = ret * pows_xi[tuple(selector)]
-        
+
     return ret
 
 
@@ -57,7 +58,7 @@ def find_common_dtype(array_types, scalar_types):
                                scalar_types=[_as_numpy_dtype(t) for t in scalar_types])
 
 
-def eval_poly(coef, x, batch_ndim = None, var_ndim = None, val_ndim = None, ):
+def eval_poly(coef, x, batch_ndim=None, var_ndim=None, val_ndim=None, ):
     """Return value at `x` of polynomial with coefficients `coef`."""
     if var_ndim is None:
         var_ndim = x.shape[-1]
@@ -71,16 +72,16 @@ def eval_poly(coef, x, batch_ndim = None, var_ndim = None, val_ndim = None, ):
         val_ndim = ndim(coef) - batch_ndim - var_ndim
 
     degs = tf.shape(coef)[batch_ndim: batch_ndim + var_ndim]
-    
-    monoms = get_monomials(x, degs = degs)
-    monoms = monoms[(Ellipsis, ) + (None, )*val_ndim]
+
+    monoms = get_monomials(x, degs=degs)
+    monoms = monoms[(Ellipsis,) + (None,) * val_ndim]
     return tf.reduce_sum(
-        coef * monoms, 
-        axis = tf.range(batch_ndim, batch_ndim + var_ndim)
+        coef * monoms,
+        axis=tf.range(batch_ndim, batch_ndim + var_ndim)
     )
 
 
-def get_1D_Taylor_matrix(a, deg:int, trunc:int=None):
+def get_1D_Taylor_matrix(a, deg: int, trunc: int = None):
     """ Return matrix with shape `[trunc, deg]` af Taylor map at `a`.
     
     Taking (truncated) Taylor expansion at $a in R$ defines a linear map $R[x] / (x^deg)$ to $R[x] / (x^trunc)$.
@@ -98,13 +99,14 @@ def get_1D_Taylor_matrix(a, deg:int, trunc:int=None):
     a = tf.convert_to_tensor(a, dtype_hint=K.floatx())
     deg = int(deg)
     zero = tf.zeros_like(a)
-    columns = [tf.stack([binom(n, k) * a**(n-k) for k in range(n + 1)] + [zero for _ in range(deg - n - 1)], axis=-1)
-               for n in range(deg)]
+    columns = [
+        tf.stack([binom(n, k) * a ** (n - k) for k in range(n + 1)] + [zero for _ in range(deg - n - 1)], axis=-1)
+        for n in range(deg)]
     M = tf.stack(columns, axis=-1)
-    
+
     if trunc is not None:
         M = M[..., :trunc, :]
-        
+
     return M
 
 
@@ -132,50 +134,51 @@ def get_1D_Taylors_to_spline_patch_matrix(a, b, deg):
     `deg` is the degree of the Taylors. Thus the degree of the spline is 2 * deg.
     """
     Taylors_matrix = tf.concat([
-            get_1D_Taylor_matrix(a, deg = 2 * deg, trunc = deg),
-            get_1D_Taylor_matrix(b, deg = 2 * deg, trunc = deg),
-        ], axis=-2)
-    
-    #print(Taylors_matrix)
+        get_1D_Taylor_matrix(a, deg=2 * deg, trunc=deg),
+        get_1D_Taylor_matrix(b, deg=2 * deg, trunc=deg),
+    ], axis=-2)
+
+    # print(Taylors_matrix)
     return tf.linalg.inv(Taylors_matrix)
-                        
+
 
 def get_Catmul_Rom_Taylors_1D(coef, control_index, control_times, added_index):
     assert len(control_times) == coef.shape[control_index]
-         
+
     i0 = list(range(len(control_times)))
     c0 = coef
-    
+
     # `t0` will be a tensor of the same ndim as `coef` but 
     # all dimenstions except at `control_index` are 1
     t_shape = np.ones(len(coef.shape), dtype=int)
     t_shape[control_index] = -1
     t0 = np.reshape(control_times, t_shape)
-    
+
     i_minus = [0] + i0[:-1]
     i_plus = i0[1:] + [i0[-1]]
-    
-    t_minus = tf.gather(  t0, indices = i_minus, axis = control_index)
-    c_minus = tf.gather(coef, indices = i_minus, axis = control_index)
-    
-    t_plus = tf.gather(  t0, indices = i_plus, axis = control_index)
-    c_plus = tf.gather(coef, indices = i_plus, axis = control_index)
-    
+
+    t_minus = tf.gather(t0, indices=i_minus, axis=control_index)
+    c_minus = tf.gather(coef, indices=i_minus, axis=control_index)
+
+    t_plus = tf.gather(t0, indices=i_plus, axis=control_index)
+    c_plus = tf.gather(coef, indices=i_plus, axis=control_index)
+
     der = (c_plus - c_minus) / (t_plus - t_minus)
-    
-    return tf.stack([c0, der], axis = added_index )
-    
-    
-    
+
+    return tf.stack([c0, der], axis=added_index)
+
+
 def _tf_ravel_multi_index(multi_index, dims):
     strides = tf.math.cumprod(dims, axis=-1, reverse=True, exclusive=True)
     return tf.reduce_sum(multi_index * strides, axis=-1)
 
+
 def _stack_tensor_array(a, axis=0):
     b = a.stack()
     nd = ndim(b)
-    perm = tf.concat([tf.range(1, axis+1), [0], tf.range(axis+1, nd)], axis=0)
+    perm = tf.concat([tf.range(1, axis + 1), [0], tf.range(axis + 1, nd)], axis=0)
     return tf.transpose(b, perm)
+
 
 @tf.function
 def poly_prod(a, b, batch_ndim=0, var_ndim=None, truncation=None, dtype=None) -> Tensor:
@@ -222,11 +225,12 @@ def poly_prod(a, b, batch_ndim=0, var_ndim=None, truncation=None, dtype=None) ->
         ndim = tf.shape(s)[0]
         val_ndim = ndim - batch_ndim - var_ndim
         batch_shape = s[:batch_ndim]
-        degs_shape = s[batch_ndim: batch_ndim+var_ndim]
-        val_shape = s[batch_ndim+var_ndim:]
+        degs_shape = s[batch_ndim: batch_ndim + var_ndim]
+        val_shape = s[batch_ndim + var_ndim:]
         flatt_degs_shape = tf.concat([batch_shape, tf.reduce_prod(degs_shape, keepdims=True), val_shape], axis=0)
         x = tf.reshape(x, flatt_degs_shape)
-        perm = tf.concat([[batch_ndim], tf.range(batch_ndim), tf.range(batch_ndim + 1, batch_ndim + 1 + val_ndim)], axis=0)
+        perm = tf.concat([[batch_ndim], tf.range(batch_ndim), tf.range(batch_ndim + 1, batch_ndim + 1 + val_ndim)],
+                         axis=0)
         return tf.transpose(x, perm=perm)
 
     a_flat = flatten_polynomial_dimensions(a)
@@ -254,139 +258,10 @@ def poly_prod(a, b, batch_ndim=0, var_ndim=None, truncation=None, dtype=None) ->
     return c
 
 
-def get_spline_from_taylors_1D_OLD(taylor_grid_coeffs, bin_axis, polynom_axis, control_times):
+def get_spline_from_taylors_1d(taylor_grid_coeffs, bin_axis, polynom_axis, control_times):
     par = control_times
     taylor_grid = taylor_grid_coeffs
-    
-    # in the first step we put into polynom_axis the taylor_polynomials of the two consecutive bins
-    start_selector = [slice(None)] * len(taylor_grid.shape)
-    start_selector[bin_axis] = slice(None, taylor_grid.shape[bin_axis] - 1)
-    start_selector = tuple(start_selector)
 
-    end_selector = [slice(None)] * len(taylor_grid.shape)
-    end_selector[bin_axis] = slice(1, None)
-    end_selector = tuple(end_selector)
-    
-    stacked_taylors = tf.concat(
-        [
-            taylor_grid[start_selector], 
-            taylor_grid[end_selector],
-        ],
-        axis = polynom_axis
-    )
-    
-    
-    ## now apply in each bin the corresponding "spline trasformation" i.e inverse of taking taylors 
-    A = np.array(
-        [
-            get_1D_Taylors_to_spline_patch_matrix(
-                    0, 1, b, deg = int(taylor_grid.shape[polynom_axis])
-                ).T
-            for a, b in zip(par[:-1], par[1:])
-        ],
-        dtype = tf.np_dtype(taylor_grid_coeffs)
-    )
-
-    coef = pit.right_apply_map_along_batch(
-        X = stacked_taylors, A = A, 
-        batch_inds = [bin_axis], contract_inds = [polynom_axis], added_inds = [polynom_axis]
-    )
-    
-    
-    return coef
-    
-def get_spline_from_taylors_1D(taylor_grid_coeffs, bin_axis, polynom_axis, control_times):
-    par = control_times
-    taylor_grid = taylor_grid_coeffs
-    
-    # in the first step we put into polynom_axis the taylor_polynomials of the two consecutive bins
-    start_selector = [slice(None)] * len(taylor_grid.shape)
-    start_selector[bin_axis] = slice(None, taylor_grid.shape[bin_axis] - 1)
-    start_selector = tuple(start_selector)
-
-    end_selector = [slice(None)] * len(taylor_grid.shape)
-    end_selector[bin_axis] = slice(1, None)
-    end_selector = tuple(end_selector)
-    
-    stacked_taylors = tf.concat(
-        [
-            taylor_grid[start_selector], 
-            taylor_grid[end_selector],
-        ],
-        axis = polynom_axis
-    )
-    
-    dtype = nptf.np_dtype(taylor_grid_coeffs)
-    deg = int(taylor_grid.shape[polynom_axis])
-    ## reparametrization matrices for expressing the taylors in bin-scaled 
-    ## Note that we have already stuck the two taylors together along the polynom-axis
-    ## so our diagonal reparametrization matrices have the diagonal repeated twice
-    ## ( thus the resulting matrix has dimension 2 * deg)
-    RM = np.array(
-        [
-            np.diag([ (b- a)**k for k in range(deg) ] * 2)
-            for a, b in zip(par[:-1], par[1:])
-        ],
-        dtype = dtype
-    )
-    
-    ## now apply in each bin the corresponding "spline trasformation" i.e inverse of taking taylors 
-    SM = np.array(
-        [
-            get_1D_Taylors_to_spline_patch_matrix(
-                    0, 1, deg = deg
-                ).T
-            for a, b in zip(par[:-1], par[1:])
-        ],
-        dtype = dtype
-    )
-
-    coef = pit.right_apply_map_along_batch(
-        X = stacked_taylors, A = RM @ SM, 
-        batch_inds = [bin_axis], contract_inds = [polynom_axis], added_inds = [polynom_axis]
-    )
-    
-    
-    return coef
-
-
-def get_1D_integral_of_piecewise_poly(                             
-        coef, bin_axis, polynom_axis, control_times,
-        polys_are_in_bin_coords = True
-    ):
-    deg = int(coef.shape[polynom_axis])
-
-    def integration_functional(a, b, deg):
-        n = np.arange(deg)
-        if polys_are_in_bin_coords:  
-            return 1/(n + 1) * (b - a)#**(n+1)
-        else:
-            return 1/(n + 1) * (b**(n+1) - a**(n+1))
-    
-    IM = np.array([
-            integration_functional(a, b, deg)
-            for a, b in zip(control_times[:-1], control_times[1:])
-        ], dtype = nptf.np_dtype(coef))
-    
-    # the following could be done with tensordot:
-    return pit.right_apply_map_along_batch(
-        X = coef, A = IM, 
-        batch_inds = [], contract_inds = [bin_axis, polynom_axis], added_inds = []
-    ) 
-    
-    
-def get_integral_of_spline_from_taylors_1d(
-        taylor_grid_coeffs, bin_axis, polynom_axis, control_times,
-    ):
-    """
-    This is basically a composition of 
-    `get_spline_from_taylors_1D` and `get_1D_integral_of_piecewise_poly`
-    I just believe that doing it in one step can be 2**n times faster
-    where n is the number of dimensions, which is not too much.
-    """
-    par = control_times
-    taylor_grid = tf.convert_to_tensor(taylor_grid_coeffs, dtype_hint=K.floatx())
-    
     # in the first step we put into polynom_axis the taylor_polynomials of the two consecutive bins
     start_selector = [slice(None)] * len(taylor_grid.shape)
     start_selector[bin_axis] = slice(None, taylor_grid.shape[bin_axis] - 1)
@@ -406,23 +281,81 @@ def get_integral_of_spline_from_taylors_1d(
     # so our diagonal reparametrization matrices have the diagonal repeated twice
     # ( thus the resulting matrix has dimension 2 * deg)
     # RM.shape = [n_bins, 2*deg, 2*deg]
-    RM = tf.linalg.diag(tf.stack([(par[1:] - par[:-1])**k for k in range(deg)] * 2, axis=1))
-    tf.assert_equal(tf.shape(RM), [n_bins, 2*deg, 2*deg])
+    RM = tf.linalg.diag(tf.stack([(par[1:] - par[:-1]) ** k for k in range(deg)] * 2, axis=1))
+    tf.assert_equal(tf.shape(RM), [n_bins, 2 * deg, 2 * deg])
 
     # now apply in each bin the corresponding "spline transformation" i.e inverse of taking taylors
     SM = tf.repeat(input=tf.transpose(get_1D_Taylors_to_spline_patch_matrix(0, 1, deg=deg))[None, :, :],
                    repeats=n_bins, axis=0)
-    tf.assert_equal(tf.shape(SM), [n_bins, 2*deg, 2*deg])
+    tf.assert_equal(tf.shape(SM), [n_bins, 2 * deg, 2 * deg])
+
+    coef = pit.right_apply_map_along_batch(X=stacked_taylors, A=RM @ SM, batch_inds=[bin_axis],
+                                           contract_inds=[polynom_axis], added_inds=[polynom_axis])
+    return coef
+
+
+def get_1d_integral_of_piecewise_poly(coef, bin_axis, polynom_axis, control_times):
+    par = control_times
+    n_bins = tf.shape(par)[0] - 1
+    deg = int(coef.shape[polynom_axis])
+
+    n = tf.range(deg, dtype=par.dtype)
+    IM = 1 / (n + 1) * (par[1:] - par[:-1])[:, None]
+    tf.assert_equal(tf.shape(IM), [n_bins, deg])
+
+    # the following could be done with tensordot:
+    return pit.right_apply_map_along_batch(
+        X=coef, A=IM, batch_inds=[], contract_inds=[bin_axis, polynom_axis], added_inds=[])
+
+
+def get_integral_of_spline_from_taylors_1d(
+        taylor_grid_coeffs, bin_axis, polynom_axis, control_times,
+):
+    """
+    This is basically a composition of 
+    `get_spline_from_taylors_1D` and `get_1D_integral_of_piecewise_poly`
+    I just believe that doing it in one step can be 2**n times faster
+    where n is the number of dimensions, which is not too much.
+    """
+    par = control_times
+    taylor_grid = tf.convert_to_tensor(taylor_grid_coeffs, dtype_hint=K.floatx())
+
+    # in the first step we put into polynom_axis the taylor_polynomials of the two consecutive bins
+    start_selector = [slice(None)] * len(taylor_grid.shape)
+    start_selector[bin_axis] = slice(None, taylor_grid.shape[bin_axis] - 1)
+    start_selector = tuple(start_selector)
+
+    end_selector = [slice(None)] * len(taylor_grid.shape)
+    end_selector[bin_axis] = slice(1, None)
+    end_selector = tuple(end_selector)
+
+    stacked_taylors = tf.concat([taylor_grid[start_selector], taylor_grid[end_selector]], axis=polynom_axis)
+
+    n_bins = tf.shape(stacked_taylors)[bin_axis]
+    deg = int(taylor_grid.shape[polynom_axis])  # `deg` is degree of input taylor-grid. Degree of spline is `2*deg`.
+
+    # reparametrization matrices for expressing the taylors in bin-scaled coordinates
+    # Note that we have already concatenated the two taylors together along the polynom-axis
+    # so our diagonal reparametrization matrices have the diagonal repeated twice
+    # ( thus the resulting matrix has dimension 2 * deg)
+    # RM.shape = [n_bins, 2*deg, 2*deg]
+    RM = tf.linalg.diag(tf.stack([(par[1:] - par[:-1]) ** k for k in range(deg)] * 2, axis=1))
+    tf.assert_equal(tf.shape(RM), [n_bins, 2 * deg, 2 * deg])
+
+    # now apply in each bin the corresponding "spline transformation" i.e inverse of taking taylors
+    SM = tf.repeat(input=tf.transpose(get_1D_Taylors_to_spline_patch_matrix(0, 1, deg=deg))[None, :, :],
+                   repeats=n_bins, axis=0)
+    tf.assert_equal(tf.shape(SM), [n_bins, 2 * deg, 2 * deg])
 
     # finally we need to integrate
     # `IM.shape == [n_bins, deg]`
-    n = tf.range(2*deg, dtype=par.dtype)
-    IM = 1/(n+1) * (par[1:] - par[:-1])[:, None]
-    tf.assert_equal(tf.shape(IM), [n_bins, 2*deg])
+    n = tf.range(2 * deg, dtype=par.dtype)
+    IM = 1 / (n + 1) * (par[1:] - par[:-1])[:, None]
+    tf.assert_equal(tf.shape(IM), [n_bins, 2 * deg])
 
     # we multiply all the transformations (we must make IM that is a batch of functionals into matrices)
     A = (RM @ SM @ IM[..., None])[..., 0]
-    
+
     # the following could be done with tensordot:
     return pit.right_apply_map_along_batch(X=stacked_taylors, A=A, batch_inds=[],
                                            contract_inds=[bin_axis, polynom_axis], added_inds=[])

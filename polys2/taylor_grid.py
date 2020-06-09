@@ -7,7 +7,7 @@ from tensorflow.keras.backend import ndim
 from polys2 import nptf
 from .batch_utils import Batched_Object
 from .engine import (get_integral_of_spline_from_taylors_1d,
-                     get_spline_from_taylors_1D,
+                     get_spline_from_taylors_1d,
                      get_Catmul_Rom_Taylors_1D,
                      )
 from .poly import Poly, Val_Indexed_Object
@@ -18,7 +18,7 @@ class TaylorGrid(Batched_Object, Val_Indexed_Object):
     def __init__(self, coef, params, batch_ndim = 0,  val_ndim = 0):
         self.coef = coef
         self.batch_ndim = batch_ndim
-        self.params = params
+        self.params = [tf.cast(c, coef.dtype) for c in params]
         self.val_ndim = val_ndim
 
         assert len(self.coef.shape) == self.batch_ndim + 2 * self.var_ndim + self.val_ndim
@@ -189,7 +189,7 @@ class TaylorGrid(Batched_Object, Val_Indexed_Object):
         coef = self.coef
 
         for i, par in enumerate(self.params):
-            coef = get_spline_from_taylors_1D(
+            coef = get_spline_from_taylors_1d(
                 taylor_grid_coeffs = coef,
                 bin_axis = self.batch_ndim + i,
                 polynom_axis = self.batch_ndim + self.var_ndim + i,

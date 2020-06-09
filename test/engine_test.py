@@ -2,7 +2,7 @@ import numpy as np
 import tensorflow as tf
 
 from polys2.engine import (get_monomials, eval_poly, get_1D_Taylor_matrix, get_1d_Taylor_coef_grid,
-                           get_1D_Taylors_to_spline_patch_matrix, get_1D_integral_of_piecewise_poly, poly_prod)
+                           get_1D_Taylors_to_spline_patch_matrix, get_1d_integral_of_piecewise_poly, poly_prod)
 
 
 def test_get_monomials():
@@ -47,13 +47,14 @@ def test_get_1d_Taylor_coef_grid():
     get_1d_Taylor_coef_grid(coef=tf.eye(2), poly_index=1, new_index=1, control_times=tf.constant([0, 1, 2], tf.float32))
 
 
-def test_get_1D_Taylors_to_spline_patch_matrix():
+def test_get_1d_Taylors_to_spline_patch_matrix():
     get_1D_Taylors_to_spline_patch_matrix(0, 1, 2)
 
 
-def test_get_1D_integral_of_piecewise_poly():
-    get_1D_integral_of_piecewise_poly(coef=np.array([[0, 1, 0], [1, 0, 0]]), bin_axis=0, polynom_axis=1,
-                                      control_times=tf.constant([-1, 0, 1], tf.float32))
+def test_get_1d_integral_of_piecewise_poly():
+    get_1d_integral_of_piecewise_poly(
+        coef=tf.constant([[0, 1, 0], [1, 0, 0]], tf.float32), bin_axis=0, polynom_axis=1,
+        control_times=tf.constant([-1, 0, 1], tf.float32))
 
 
 def test_poly_prod():
@@ -83,7 +84,7 @@ if __name__ == "__main__":
     test_get_1D_Taylor_matrix()
 
     test_get_1d_Taylor_coef_grid()
-    test_get_1D_Taylors_to_spline_patch_matrix()
-    test_get_1D_integral_of_piecewise_poly()
+    test_get_1d_Taylors_to_spline_patch_matrix()
+    test_get_1d_integral_of_piecewise_poly()
     test_poly_prod()
     test_poly_prod__in_2d()
