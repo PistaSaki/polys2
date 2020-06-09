@@ -6,7 +6,7 @@ import tensorflow as tf
 from tensorflow.keras.backend import ndim
 from matplotlib import pyplot as pl
 
-from polys2 import nptf
+from .tensor_utils import batched_gather_nd
 from .batch_utils import Batched_Object
 from .engine import (get_1d_integral_of_piecewise_poly)
 from .plot_utils import plot_fun
@@ -167,7 +167,7 @@ class PolyMesh(Batched_Object):
         bin_indices = tf.stack(bin_indices_unstack, axis=-1)
 
         poly = Poly(
-            coef=nptf.batched_gather_nd(
+            coef=batched_gather_nd(
                 a=self.coef, indices=bin_indices, batch_ndim=self.batch_ndim
             ),
             batch_ndim=self.batch_ndim, var_ndim=self.var_ndim, val_ndim=self.val_ndim)

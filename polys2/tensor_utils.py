@@ -1,5 +1,61 @@
 import numpy as np
 import tensorflow as tf
+from tensorflow.keras.backend import ndim
+
+
+def batched_gather_nd(a, indices, batch_ndim):
+    """Return tensor `t` s.t. `t[i] == gather_nd(a[i], indices[i])` for any multiindex `i` of length `batch_ndim`.
+
+    Args:
+        a: tensor (np or tf)
+        indices: integer-valued tensor (np or tf)
+        batch_ndim: int
+
+    Notes:
+        The first `batch_ndim` axes of `a` and `indices` should be broadcast-compatible.
+
+    Returns:
+        tensor `t` .
+    """
+    a = tf.convert_to_tensor(a)
+    indices = tf.convert_to_tensor(indices, dtype_hint=tf.int32)
+    a_shape = tf.shape(a)
+    indices_ndim = ndim(indices)
+    assert indices_ndim >= batch_ndim + 1, "indices_ndim = {} should be greater than batch_ndim = {}".format(
+        indices_ndim, batch_ndim)
+
+    batch_shape = tf.broadcast_dynamic_shape(a_shape[:batch_ndim], tf.shape(indices)[:batch_ndim])
+
+    # we force `indices` to have this batch_shape (needed for broadcasting in `indices` to work)
+    indices = indices * tf.ones(
+        shape=tf.concat([batch_shape, [1] * (indices_ndim - batch_ndim)], axis=0),
+        dtype=indices.dtype
+    )
+
+    ###
+    sh = tf.concat([batch_shape, tf.shape(indices)[batch_ndim: -1], [1]], axis=0)
+
+    # we want to apply gather_nd, for this we must add indices
+    # that traverse the first `batch_ndim` dimensions of our tensors
+    ranges = [tf.cast(tf.range(d), dtype=indices.dtype) for d in tf.unstack(sh)]
+
+    # in order to broadcast in `a` we must slightly modify `ranges`:
+    ranges = [
+                 tf.minimum(r, d - 1)
+                 for r, d in zip(ranges[:batch_ndim], tf.unstack(tf.cast(a_shape, indices.dtype))[:batch_ndim])
+             ] + ranges[batch_ndim:]
+    augmented_indices = tf.concat(tf.meshgrid(*ranges, indexing="ij")[:batch_ndim] + [indices], axis=-1)
+
+    # infer the static shape in tensorflow
+    static_batch_shape = tf.broadcast_static_shape(
+        a.shape[:batch_ndim],
+        indices.shape[:batch_ndim]
+    )
+    stat_aug_ind_shape = static_batch_shape.as_list() + indices.shape.as_list()[batch_ndim:]
+    stat_aug_ind_shape[-1] += batch_ndim
+    augmented_indices.set_shape(stat_aug_ind_shape)
+
+    return tf.gather_nd(a, augmented_indices)
 
 
 def right_apply_map_along_batch(X, A, batch_inds, contract_inds, added_inds,):

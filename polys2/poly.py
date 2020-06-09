@@ -9,7 +9,7 @@ from scipy.special import factorial, binom
 from typing import Union, Tuple, List
 
 from polys2 import nptf
-from polys2.nptf import is_tf_object, stack_from_array
+from polys2.nptf import stack_from_array
 from . import tensor_utils as pit
 
 from .batch_utils import Batched_Object
