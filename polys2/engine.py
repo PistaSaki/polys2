@@ -9,8 +9,6 @@ from tensorflow.keras import backend as K
 from tensorflow.keras.backend import ndim
 
 from scipy.special import binom
-import numpy.linalg as la
-from polys2 import nptf
 from . import tensor_utils as pit
 
 

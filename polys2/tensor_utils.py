@@ -182,3 +182,124 @@ def flatten_left(values, ndims=None):
     )
     
     return tf.reshape(values, new_shape)
+
+
+#######################################################
+## From TF tensors to NP arrays and back
+
+def unstack_to_array(x, ndim=None, start_index=0):
+    """
+    Returns a numpy array of tensorflow tensors
+    corresponding to successive unstacking of the first `ndim`
+    dimensions of `x` starting at `start_index`.
+    If `ndim` is not specified, all the dimensions are unstack.
+    """
+
+    ## fussing about the shapes
+    if x.shape == None:
+        raise ValueError("In order to unstack a tensor you need to know its shape at least partially.")
+
+    if ndim is None:
+        end_index = len(x.shape)
+        ndim = end_index - start_index
+    else:
+        end_index = start_index + ndim
+
+    try:
+        np_shape = [int(dim) for dim in x.shape[start_index:end_index]]
+    except TypeError as e:
+        raise ValueError(
+            "The dimensions you want to unstack must be known in advance. " +
+            "x.shape = " + str(x.shape) + " and you want to unstack dimensions " +
+            str(start_index) + " to " + str(end_index) + "."
+        ) from e
+
+    tf_shape = tf.shape(x)
+
+    ## reshape `x` so that all the unstack indices become one at position `start_index`
+    xr = tf.reshape(
+        tensor=x,
+        shape=tf.concat(
+            values=[
+                tf_shape[:start_index],
+                np.array([np.prod(np_shape)], dtype=np.int32),
+                tf_shape[end_index:]
+            ],
+            axis=0
+        )
+    )
+
+    ## unstack this one dimension into list
+    l = tf.unstack(xr, axis=start_index)
+
+    ## reshape this one dimensional list into a np.array of required shape
+    return np.array(l).reshape(np_shape)
+
+
+def stack_from_array(a, start_index=None, val_shape=None, dtype=None):
+    """
+    We assume `a` contains tf tensors of same shape (maybe scalars) and we stack them together.
+    The indices of `a` will correspond to a group of indices
+    of the result starting at `start_index`.
+    """
+    a_flat = list(a.flat)
+    if val_shape is None:
+        try:
+            val_shape = tf.shape(a_flat[0])
+        except ValueError as exc:
+            raise ValueError("val_shape can not be inferred.") from exc
+
+    if start_index is None:
+        start_index = 0
+    res_flat = tf.stack(a_flat, axis=start_index)
+    res_shape = tf.concat([val_shape[:start_index], a.shape, val_shape[start_index:]], axis=0)
+    res = tf.reshape(res_flat, res_shape)
+    return res
+
+
+def array_to_tf(a):
+    """
+    Converts np.array `a` to one TensorFlow tensor.
+    If `a` is numeric then we return tf.constant.
+    If not, we assume it contains tf tensors of same shape (maybe scalars) and we stack them together.
+    """
+    if np.issubdtype(a.dtype, np.number):
+        return tf.constant(a)
+    else:
+        return stack_from_array(a, start_index=0)
+
+
+def stack_from_array__keep_values_together(a, start_index=None):
+    """
+    We assume `a` contains tf tensors of same shape (maybe scalars) and we stack them together.
+    The dimensions of the elements of `a` will correspond to a group of indices
+    of the result starting at `start_index`.
+    """
+    val_shape = tf.shape(a.flat[0])
+
+    res = tf.stack(list(a.flat), axis=0)
+    res = tf.reshape(res,
+                     shape=tf.concat(
+                         values=[
+                             a.shape,
+                             val_shape,
+                         ],
+                         axis=0
+                     )
+                     )
+
+    if start_index is not None:
+        assert 0 <= start_index <= a.ndim
+        val_ndim = tf.shape(val_shape)[0]
+        res_ndim = a.ndim + val_ndim  # = tf.shape(tf.shape(res))[0]
+        res = tf.transpose(res,
+                           perm=tf.concat(
+                               values=[
+                                   tf.range(start_index),
+                                   tf.range(a.ndim, res_ndim),
+                                   tf.range(start_index, a.ndim)
+                               ],
+                               axis=0
+                           )
+                           )
+    return res

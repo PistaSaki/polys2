@@ -3,7 +3,6 @@
 import tensorflow as tf
 from tensorflow import Tensor
 from tensorflow.keras import backend as K
-from polys2 import nptf
 from typing import List, Tuple, Callable
 
 from .poly import get_bin_indices    
@@ -172,7 +171,7 @@ def evaluate_interpolator(
         tensor of shape `batch_shape + codomain_shape`
     
     """
-    
+    values = tf.convert_to_tensor(values, dtype_hint=K.floatx())
     if raveled:
         message = "Incompatible shapes, consider changing `raveled` argument."
         tf.assert_equal(values.shape[0], 
@@ -197,9 +196,8 @@ def evaluate_interpolator(
     )
     
     ##
-    dtype = nptf.np_dtype(values)
     indices, multi_indices, coeffs = get_spline_coeffs(
-            params, x, crop_x=crop_x, dtype=dtype)
+            params, x, crop_x=crop_x, dtype=values.dtype)
     ## 
     
     if raveled:

@@ -4,7 +4,6 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.keras.backend import ndim
 
-from polys2 import nptf
 from .batch_utils import Batched_Object
 from .engine import (get_integral_of_spline_from_taylors_1d,
                      get_spline_from_taylors_1d,

@@ -3,15 +3,11 @@ import tensorflow as tf
 from tensorflow import Tensor
 from tensorflow.keras import backend as K
 from tensorflow.keras.backend import ndim
-import numbers
 import itertools as itt
 from scipy.special import factorial, binom
 from typing import Union, Tuple, List
 
-from polys2 import nptf
-from polys2.nptf import stack_from_array
-from . import tensor_utils as pit
-
+from polys2.tensor_utils import stack_from_array, apply_tensor_product_of_maps
 from .batch_utils import Batched_Object
 from .engine import (poly_prod, eval_poly, get_1D_Taylor_matrix, get_1d_Taylor_coef_grid, find_common_dtype)
 from .plot_utils import plot_fun
@@ -19,13 +15,6 @@ from .plot_utils import plot_fun
 
 #####################################
 ## Some other auxilliary funs
-        
-def replace_numbers_in_array(a, zeros):
-    for i in range(a.size):
-        if isinstance(a.flat[i], numbers.Number):
-            a.flat[i] += zeros
-            
-
 
 def get_bin_indices(bins, tt):
     """ Return bin-indices containing elements of `tt`.
@@ -244,7 +233,7 @@ class Poly(Batched_Object, Val_Indexed_Object):
         assert isinstance(a, (np.ndarray, tf.Tensor, tf.Variable))
             
         f = self
-        assert nptf.ndim(a) == f.val_ndim
+        assert ndim(a) == f.val_ndim
         added_ndim = f.batch_ndim + f.var_ndim
         a = a[(None,) * added_ndim + (Ellipsis, )]
         #print(a.shape, f.coef.shape)
@@ -281,7 +270,7 @@ class Poly(Batched_Object, Val_Indexed_Object):
                 
         #print("axis =", axis)
         return Poly(
-            coef = nptf.reduce_sum(
+            coef = tf.reduce_sum(
                 f.coef, 
                 axis = axis
             ),
@@ -321,7 +310,7 @@ class Poly(Batched_Object, Val_Indexed_Object):
         """Return taylor expansion at `a`."""
         assert a.shape[-1] == self.var_ndim
         if ndim(a) == 1:
-            taylor_coef = pit.apply_tensor_product_of_maps(
+            taylor_coef = apply_tensor_product_of_maps(
                 matrices=[get_1D_Taylor_matrix(a[..., i], deg=self.degs[i]) for i in range(a.shape[-1])],
                 x=self.coef,
                 start_index=self.batch_ndim
