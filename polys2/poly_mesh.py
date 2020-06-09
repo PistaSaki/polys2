@@ -144,67 +144,37 @@ class PolyMesh(Batched_Object):
     @property
     def bins_shape(self):
         return [d - 1 for d in self.grid_shape]
-    
-    
+
     def __call__(self, x):
         x = tf.cast(x, self.coef.dtype)
+
+        tf.assert_equal(ndim(x) - 1, self.batch_ndim,
+                        f"Batch-ndim of `x` is {ndim(x) - 1} but the batch-ndim of this MeshGrid is {self.batch_ndim}.")
+
+        tf.assert_equal(x.shape[-1], self.var_ndim, (f"Variable-dimension of this MeshGrid is {self.var_ndim} "
+                        f"but the dimension of `x` you want to plug into is is {x.shape[-1]}."))
         
-        assert nptf.ndim(x) - 1 == self.batch_ndim, (
-            "Batch-ndim of `x` is {} "
-            "but the batch-ndim of this MeshGrid is {}.".format(
-                nptf.ndim(x) - 1, self.batch_ndim
-            )
-        )
-        assert x.shape[-1] == self.var_ndim, (
-            "Variable-dimension of this MeshGrid is {} "
-            "but the dimension of `x` you want to plug into is is {}.".format(
-                self.var_ndim, x.shape[-1], 
-            ) 
-        )
+        # divide `x` into list of its coordinates
+        x_unstack = tf.unstack(x, axis=-1)
         
-        ## divide `x` into list of its coordinates
-        x_unstack = nptf.unstack(x, axis = -1)
+        # force all coordinates of `x` into the range of params
+        x_unstack = [tf.maximum(cc[0], tf.minimum(t, cc[-1])) for cc, t in zip(self.params, x_unstack)]
         
-        ## force all coordinates of `x` into the range of params
-        x_unstack = [
-            nptf.maximum(cc[0], nptf.minimum(t, cc[-1])) 
-            for cc, t in zip(self.params, x_unstack)
-        ]
-        
-        ## find the bin (polynomial patch) containing x
-        bin_indices_unstack = [
-             nptf.minimum(get_bin_indices(np.array(cc), t), len(cc)-2) 
-             for cc, t in zip(self.params, x_unstack)
-            ]
-        
-        bin_indices = nptf.stack( bin_indices_unstack, axis = -1)
-        
+        # find the bin (polynomial patch) containing x
+        bin_indices_unstack = [tf.minimum(get_bin_indices(cc, t), n_bins - 1)
+                               for cc, n_bins, t in zip(self.params, self.bins_shape, x_unstack)]
+
+        bin_indices = tf.stack(bin_indices_unstack, axis=-1)
+
         poly = Poly(
-            coef = nptf.batched_gather_nd(
-                a = self.coef, indices = bin_indices, batch_ndim = self.batch_ndim
+            coef=nptf.batched_gather_nd(
+                a=self.coef, indices=bin_indices, batch_ndim=self.batch_ndim
             ),
-            batch_ndim = self.batch_ndim, 
-            var_ndim=self.var_ndim, 
-            val_ndim=self.val_ndim 
-        )
+            batch_ndim=self.batch_ndim, var_ndim=self.var_ndim, val_ndim=self.val_ndim)
         
-        ## reparametrize `x` in the relative coordinates of the corresponding bin
-        bin_start = nptf.stack(
-            [
-             nptf.gather(cc, ii)
-             for cc, ii in zip(self.params, bin_indices_unstack)
-            ],
-            axis = -1
-        )
-        
-        bin_end = nptf.stack(
-            [
-             nptf.gather(cc, ii + 1)
-             for cc, ii in zip(self.params, bin_indices_unstack)
-            ],
-            axis = -1
-        ) 
-        
+        # reparametrize `x` in the relative coordinates of the corresponding bin
+        bin_start = tf.stack([tf.gather(cc, ii) for cc, ii in zip(self.params, bin_indices_unstack)], axis=-1)
+        bin_end = tf.stack([tf.gather(cc, ii + 1) for cc, ii in zip(self.params, bin_indices_unstack)], axis=-1)
         x_rel = (x - bin_start) / (bin_end - bin_start)
     
         return poly(x_rel)
@@ -216,8 +186,7 @@ class PolyMesh(Batched_Object):
             var_ndim=self.var_ndim, 
             val_ndim=self.val_ndim
         )
-    
-    
+
     def val_mul(self, a):
         """
         Multiply values by tensor `a` s.t. `a.ndim == self.val_ndim`.
@@ -231,8 +200,7 @@ class PolyMesh(Batched_Object):
         """
         f = self.to_Poly()
         return f.val_sum(axis).to_PolyMesh(self.params)
-    
-    
+
     def bin_indices(self):
         return itt.product(*[range(len(par) -1) for par in self.params])
     
@@ -248,9 +216,7 @@ class PolyMesh(Batched_Object):
     
     def domain_start(self):
         return [par[0] for par in self.params]
-    
-    
-            
+
     def plot(self, **kwargs):
         plot_fun(self, 
             start = [par[0] for par in self.params],
@@ -270,8 +236,7 @@ class PolyMesh(Batched_Object):
             pl.scatter(*zip(*itt.product(*self.params)), marker = "+")
         
         return cp
-            
-    
+
     def integrate(self):
         coef = self.coef
         for i in range(self.var_ndim):
@@ -283,4 +248,3 @@ class PolyMesh(Batched_Object):
             )
             
         return coef
-    
