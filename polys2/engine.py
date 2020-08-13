@@ -178,12 +178,7 @@ def _stack_tensor_array(a, axis=0):
     return tf.transpose(b, perm)
 
 
-@tf.function
 def poly_prod(a, b, batch_ndim=0, var_ndim=None, truncation=None, dtype=None) -> Tensor:
-    """
-    Ramark:
-        this function is decorated by `tf.function` to circumvent the problem described in `autograph_problem.py`.
-    """
     dtype = dtype or K.floatx()
     a = tf.cast(a, dtype)
     b = tf.cast(b, dtype)
@@ -210,11 +205,11 @@ def poly_prod(a, b, batch_ndim=0, var_ndim=None, truncation=None, dtype=None) ->
     a = a[(Ellipsis,) + (None,) * (ndim(b) - ndim(a))]
 
     # degrees of the polys
-    degs_a, degs_b = [tf.shape(x)[batch_ndim: batch_ndim + var_ndim] for x in [a, b]]
+    degs_a, degs_b = [np.array(x.shape[batch_ndim: batch_ndim + var_ndim], np.int) for x in [a, b]]
     degs_c = degs_a + degs_b - 1
 
     if truncation is not None:
-        degs_c = tf.minimum(degs_c, truncation)
+        degs_c = np.minimum(degs_c, truncation)
 
     c_batch_shape = tf.broadcast_dynamic_shape(tf.shape(a)[:batch_ndim], tf.shape(b)[:batch_ndim])
 
@@ -235,17 +230,17 @@ def poly_prod(a, b, batch_ndim=0, var_ndim=None, truncation=None, dtype=None) ->
     b_flat = flatten_polynomial_dimensions(b)
     c_array = tf.TensorArray(dtype=dtype, size=tf.reduce_prod(degs_c))
     element_shape = tf.concat([c_batch_shape, val_shape], axis=0)
-    for i in tf.range(tf.reduce_prod(degs_c)):
+    for i in range(np.prod(degs_c)):
         c_array = c_array.write(i, tf.zeros(element_shape, dtype))
 
-    for i in tf.range(tf.reduce_prod(degs_a)):
-        mi = tf.unravel_index(i, degs_a)
+    for i in range(np.prod(degs_a)):
+        mi = np.array(np.unravel_index(i, degs_a))
 
-        for j in tf.range(tf.reduce_prod(degs_b)):
-            mj = tf.unravel_index(j, degs_b)
+        for j in range(np.prod(degs_b)):
+            mj = np.array(np.unravel_index(j, degs_b))
 
             m = mi + mj
-            if tf.reduce_all(m < degs_c):
+            if np.all(m < degs_c):
                 n = _tf_ravel_multi_index(m, dims=degs_c)
                 c_array = c_array.write(n, c_array.read(n) + a_flat[i] * b_flat[j])
 
