@@ -89,16 +89,15 @@ class Poly(Batched_Object, Val_Indexed_Object):
             assert var_ndim is not None, "For a constant polynomial you must specify the number of variables."
             return Poly(coef=a[(...,) + (None,)*var_ndim], batch_ndim=batch_ndim, var_ndim=var_ndim)
         
-        a_shape = a.shape
-        n = a_shape[-1]
+        n = a.shape[-1]
         if var_ndim is not None: 
             assert n == var_ndim
             
-        assert all([d == n for d in a_shape[batch_ndim:]]), f"All the dims should be equal {a_shape[batch_ndim:]}, {a_shape}, {batch_ndim}."
+        assert all([d == n for d in a.shape[batch_ndim:]]), f"All the dims should be equal {a.shape[batch_ndim:]}, {a.shape}, {batch_ndim}."
 
         coef = np.empty(shape=(deg+1, ) * n, dtype=np.object)
         for jj in itt.product(*([range(deg+1)]*n)):
-            coef[jj] = tf.zeros(a_shape[:batch_ndim], a.dtype)
+            coef[jj] = tf.zeros(tf.shape(a)[:batch_ndim], a.dtype)
         bs = (slice(None),) * batch_ndim
         for iii in itt.product(*([range(n)]*deg)):
             degs = np.zeros(n, dtype=np.int)
