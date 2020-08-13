@@ -379,14 +379,14 @@ class Poly(Batched_Object, Val_Indexed_Object):
             val_ndim=self.val_ndim
         )
         # Since b is nilpotent with highest nonzero power at most n = total degree:
-        n = tf.reduce_sum(tf.cast(degs, tf.int32) - 1)
+        n = sum(degs) - 1
         # we can calculate exp(b) as sum of the first n + 1 terms of the power series.
 
         exp_b_coef = (1 + b).pad_degs(degs).coef
         b_k_coef = b.pad_degs(degs).coef
         sh = b_k_coef.shape
         factorial_k = 1
-        for k in tf.range(2, n+1):
+        for k in range(2, n+1):
             factorial_k = factorial_k * k
             b_k_coef = poly_prod(b_k_coef, b.coef, truncation=degs,
                                  batch_ndim=self.batch_ndim, var_ndim=self.var_ndim)
