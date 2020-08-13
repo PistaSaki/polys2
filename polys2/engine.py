@@ -315,7 +315,7 @@ def get_integral_of_spline_from_taylors_1d(
 
     # in the first step we put into polynom_axis the taylor_polynomials of the two consecutive bins
     start_selector = [slice(None)] * len(taylor_grid.shape)
-    start_selector[bin_axis] = slice(None, taylor_grid.shape[bin_axis] - 1)
+    start_selector[bin_axis] = slice(None, -1)
     start_selector = tuple(start_selector)
 
     end_selector = [slice(None)] * len(taylor_grid.shape)
