@@ -150,7 +150,7 @@ def get_Catmul_Rom_Taylors_1D(coef, control_index, control_times, added_index):
     # all dimenstions except at `control_index` are 1
     t_shape = np.ones(len(coef.shape), dtype=int)
     t_shape[control_index] = -1
-    t0 = np.reshape(control_times, t_shape)
+    t0 = tf.reshape(control_times, t_shape)
 
     i_minus = [0] + i0[:-1]
     i_plus = i0[1:] + [i0[-1]]
