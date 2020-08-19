@@ -141,7 +141,7 @@ def get_1D_Taylors_to_spline_patch_matrix(a, b, deg):
 
 
 def get_Catmul_Rom_Taylors_1D(coef, control_index, control_times, added_index):
-    assert len(control_times) == coef.shape[control_index]
+    tf.assert_equal(tf.shape(control_times)[0], tf.shape(coef)[control_index])
 
     i0 = list(range(len(control_times)))
     c0 = coef

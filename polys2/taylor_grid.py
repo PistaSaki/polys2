@@ -224,10 +224,11 @@ class TaylorGrid(Batched_Object, Val_Indexed_Object):
                     exponent = exponent, degs = degs
             ).to_TaylorGrid(self.params)
 
-
-
     @staticmethod
-    def from_Catmull_Rom(coef, params, batch_ndim = 0, val_ndim = None):
+    def from_Catmull_Rom(coef, params, batch_ndim=0, val_ndim=None):
+        tf.assert_equal(tf.shape(coef)[batch_ndim: batch_ndim + len(params)],
+                        tf.concat([tf.shape(p) for p in params], axis=0))
+
         if val_ndim is None:
             val_ndim = len(coef.shape) - batch_ndim - len(params)
 
