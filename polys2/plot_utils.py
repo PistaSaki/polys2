@@ -1,9 +1,9 @@
 import numpy as np
 import matplotlib.pyplot as pl
 
-def plot_fun_heatmap(f, xxx, yyy):
+def plot_fun_heatmap(f, xxx, yyy, **kwargs):
     fff = np.array([[ f([x,y]) for y in yyy ] for x in xxx])
-    cp = pl.contourf( xxx, yyy, fff.T, cmap=pl.cm.rainbow)    
+    cp = pl.contourf( xxx, yyy, fff.T, cmap=pl.cm.rainbow, **kwargs)
     return cp
 
 def plot_fun(f, start, end, **kwargs):
@@ -21,7 +21,7 @@ def plot_fun(f, start, end, **kwargs):
         start = start if start is not None else [0,0]
         end = end if end is not None else [1,1]
 
-        plot_fun_heatmap(
+        return plot_fun_heatmap(
             f = f,
             xxx = np.linspace(start[0], end[0], 30),
             yyy = np.linspace(start[1], end[1], 30),
